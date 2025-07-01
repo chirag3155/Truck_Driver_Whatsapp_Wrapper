@@ -16,6 +16,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -72,6 +73,7 @@ public class WhatsAppWebhookController {
             )
         )
     })
+    
     @PostMapping("/callback")
     public ResponseEntity<Map<String, String>> receiveInboundMessage(@RequestBody String messageData) {
         try {
@@ -195,4 +197,6 @@ public class WhatsAppWebhookController {
         
         return ResponseEntity.ok("WhatsApp webhook endpoint is active");
     }
+
+
 } 

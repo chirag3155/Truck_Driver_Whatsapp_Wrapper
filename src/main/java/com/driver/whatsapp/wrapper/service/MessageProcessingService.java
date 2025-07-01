@@ -5,10 +5,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
-import java.util.HashMap;
+import java.time.Instant;
+import java.time.format.DateTimeParseException;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.Map;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 @Service
 @Slf4j
@@ -18,189 +18,67 @@ public class MessageProcessingService {
     private WhatsAppService whatsAppService;
 
     @Autowired
-    private TruKKerService truKKerService;
+    private ChatModuleService chatModuleService;
 
-    // Store conversation state for each driver (In production, use Redis or database)
-    private final Map<String, ConversationState> conversationStates = new HashMap<>();
+    // Conversation timeout configuration (30 minutes by default)
+    private static final long CONVERSATION_TIMEOUT_MS = 30 * 60 * 1000L; // 30 minutes
+
+    // Track last message timestamp for each driver
+    private final Map<String, Long> lastMessageTimestamps = new ConcurrentHashMap<>();
 
     /**
-     * Process incoming WhatsApp message from driver
+     * Process incoming WhatsApp message from driver using Chat Module
      */
     public void processDriverMessage(WhatsAppWebhookResponse webhookResponse) {
         for (WhatsAppWebhookResponse.Result result : webhookResponse.getResults()) {
             String driverPhone = result.getFrom();
             String messageContent = getMessageContent(result.getMessage());
-            String orderId = result.getMessageId();
+            String messageId = result.getMessageId();
+            String driverName = getContactName(result.getContact());
+            String messageType = getMessageType(result.getMessage());
+            String platform = getPlatform(result.getIntegrationType());
+            long timestamp = parseReceivedAtTimestamp(result.getReceivedAt());
 
-            log.info("Processing message from driver: {}, Content: {}, OrderId: {}", 
-                    driverPhone, messageContent, orderId);
+            log.info("Processing message from driver: {} ({}), Content: '{}', Type: {}, Platform: {}, Timestamp: {}", 
+                    driverPhone, driverName, messageContent, messageType, platform, timestamp);
 
-            // Get or create conversation state
-            ConversationState state = conversationStates.getOrDefault(driverPhone, 
-                    new ConversationState(driverPhone, orderId));
-            conversationStates.put(driverPhone, state);
+            // Check and cleanup expired conversation before processing new message
+            cleanupExpiredConversation(driverPhone);
 
-            processMessageBasedOnState(state, messageContent, driverPhone, orderId);
-        }
-    }
+            // Update last message timestamp for this driver
+            lastMessageTimestamps.put(driverPhone, System.currentTimeMillis());
 
-    /**
-     * Process message based on current conversation state
-     */
-    private void processMessageBasedOnState(ConversationState state, String messageContent, 
-                                           String driverPhone, String orderId) {
-        
-        log.info("Current conversation step for driver {}: {}", driverPhone, state.getCurrentStep());
-        
-        switch (state.getCurrentStep()) {
-            case INITIAL_ETA_CHECK:
-                log.info("Handling INITIAL_ETA_CHECK for driver: {}", driverPhone);
-                handleInitialEtaResponse(state, messageContent, driverPhone, orderId);
-                break;
-            case WAITING_FOR_NEW_ETA:
-                log.info("Handling WAITING_FOR_NEW_ETA for driver: {}", driverPhone);
-                handleNewEtaResponse(state, messageContent, driverPhone, orderId);
-                break;
-            case WAITING_FOR_ISSUE_TYPE:
-                log.info("Handling WAITING_FOR_ISSUE_TYPE for driver: {}", driverPhone);
-                handleIssueTypeResponse(state, messageContent, driverPhone, orderId);
-                break;
-            case WAITING_FOR_BREAKDOWN_DETAILS:
-                log.info("Handling WAITING_FOR_BREAKDOWN_DETAILS for driver: {}", driverPhone);
-                handleBreakdownDetailsResponse(state, messageContent, driverPhone, orderId);
-                break;
-            case COMPLETED:
-                log.info("Conversation already completed for driver: {}", driverPhone);
-                whatsAppService.sendTextMessage(driverPhone, 
-                    "Thank you! Your status has already been updated. If you need further assistance, please contact our support team.", orderId);
-                break;
-            default:
-                log.warn("Falling back to handleGeneralResponse for driver: {} with state: {}", driverPhone, state.getCurrentStep());
-                handleGeneralResponse(state, messageContent, driverPhone, orderId);
-        }
-    }
+            // Skip empty messages
+            if (messageContent == null || messageContent.trim().isEmpty()) {
+                log.warn("Received empty message from driver {}", driverPhone);
+                return;
+            }
 
-    /**
-     * Handle initial ETA check response (Yes/No)
-     */
-    private void handleInitialEtaResponse(ConversationState state, String messageContent, 
-                                        String driverPhone, String orderId) {
-        
-        log.info("Checking message: '{}' for positive/negative response", messageContent);
-        boolean isPositive = containsPositiveResponse(messageContent);
-        boolean isNegative = containsNegativeResponse(messageContent);
-        log.info("Positive response: {}, Negative response: {}", isPositive, isNegative);
-        
-        if (isPositive) {
-            // Driver is on time
-            log.info("Driver {} confirmed on time for order: {}", driverPhone, orderId);
-            truKKerService.updateDriverStatusOnTime(orderId, driverPhone);
-            whatsAppService.sendConfirmationMessage(driverPhone, 
-                    "Thank you for confirming! You're marked as on time. Have a safe journey!", orderId);
-            state.setCurrentStep(ConversationStep.COMPLETED);
-            
-        } else if (isNegative) {
-            // Driver is late, ask for more details
-            log.info("Driver {} reported delay for order: {}", driverPhone, orderId);
-            whatsAppService.sendTextMessage(driverPhone, 
-                    "We understand you're facing a delay. Please let us know:\n" +
-                    "1. Traffic delay\n" +
-                    "2. Vehicle breakdown\n" +
-                    "3. Other issue\n\n" +
-                    "Just reply with the number (1, 2, or 3) or describe your issue.", orderId);
-            state.setCurrentStep(ConversationStep.WAITING_FOR_ISSUE_TYPE);
-            
-        } else {
-            // Unclear response, ask again
-            log.info("Unclear response from driver {}: '{}'", driverPhone, messageContent);
-            whatsAppService.sendTextMessage(driverPhone, 
-                    "I didn't understand your response. Please reply with:\n" +
-                    "- 'Yes' if you're on time\n" +
-                    "- 'No' if you're facing delays", orderId);
-        }
-    }
+            try {
+                // Send message to chat module and get AI response
+                String aiResponse = chatModuleService.sendMessageToChatModule(
+                    driverPhone, 
+                    driverName,
+                    messageContent, 
+                    messageId, 
+                    timestamp,
+                    messageType,
+                    platform
+                );
 
-    /**
-     * Handle issue type response
-     */
-    private void handleIssueTypeResponse(ConversationState state, String messageContent, 
-                                       String driverPhone, String orderId) {
-        
-        if (messageContent.contains("1") || containsTrafficKeywords(messageContent)) {
-            // Traffic delay
-            truKKerService.updateDriverStatusDelayed(orderId, driverPhone, "Traffic delay");
-            whatsAppService.sendNewEtaRequest(driverPhone, orderId);
-            state.setCurrentStep(ConversationStep.WAITING_FOR_NEW_ETA);
-            
-        } else if (messageContent.contains("2") || containsBreakdownKeywords(messageContent)) {
-            // Vehicle breakdown
-            whatsAppService.sendTextMessage(driverPhone, 
-                    "Sorry to hear about the breakdown. Please provide more details about the issue so we can assist you better.", orderId);
-            state.setCurrentStep(ConversationStep.WAITING_FOR_BREAKDOWN_DETAILS);
-            
-        } else if (messageContent.contains("3") || messageContent.toLowerCase().contains("other")) {
-            // Other issue
-            whatsAppService.sendTextMessage(driverPhone, 
-                    "Please describe the issue you're facing and provide your new estimated arrival time.", orderId);
-            state.setCurrentStep(ConversationStep.WAITING_FOR_NEW_ETA);
-            
-        } else {
-            // Try to extract time directly if they provided ETA
-            String extractedTime = extractTimeFromMessage(messageContent);
-            if (extractedTime != null) {
-                handleNewEtaResponse(state, messageContent, driverPhone, orderId);
-            } else {
-                whatsAppService.sendTextMessage(driverPhone, 
-                        "Please select:\n1. Traffic delay\n2. Vehicle breakdown\n3. Other issue", orderId);
+                log.info("Received AI response for driver {}: {}", driverPhone, aiResponse);
+
+                // Send AI response back to driver via WhatsApp
+                whatsAppService.sendTextMessage(driverPhone, aiResponse, messageId);
+                
+            } catch (Exception e) {
+                log.error("Error processing message from driver {}: {}", driverPhone, e.getMessage(), e);
+                
+                // Send fallback response
+                String fallbackResponse = "I'm having trouble processing your message right now. Please try again or contact support if the issue persists.";
+                whatsAppService.sendTextMessage(driverPhone, fallbackResponse, messageId);
             }
         }
-    }
-
-    /**
-     * Handle new ETA response
-     */
-    private void handleNewEtaResponse(ConversationState state, String messageContent, 
-                                    String driverPhone, String orderId) {
-        
-        String newEta = extractTimeFromMessage(messageContent);
-        
-        if (newEta != null) {
-            // Valid ETA provided
-            truKKerService.updateNewEta(orderId, newEta, driverPhone);
-            whatsAppService.sendConfirmationMessage(driverPhone, 
-                    String.format("Thank you! We've updated your new ETA to %s. " +
-                                "The system has been notified. Stay safe!", newEta), orderId);
-            state.setCurrentStep(ConversationStep.COMPLETED);
-            
-        } else {
-            // Invalid ETA format
-            whatsAppService.sendTextMessage(driverPhone, 
-                    "Please provide a valid time format (e.g., 10:30 AM, 2:15 PM, or 14:30).", orderId);
-        }
-    }
-
-    /**
-     * Handle breakdown details response
-     */
-    private void handleBreakdownDetailsResponse(ConversationState state, String messageContent, 
-                                              String driverPhone, String orderId) {
-        
-        truKKerService.updateDriverStatusBreakdown(orderId, driverPhone, messageContent);
-        whatsAppService.sendConfirmationMessage(driverPhone, 
-                "Thank you for the details. We've notified the system about the breakdown. " +
-                "Our support team will contact you shortly to assist with the situation.", orderId);
-        state.setCurrentStep(ConversationStep.COMPLETED);
-    }
-
-    /**
-     * Handle general responses
-     */
-    private void handleGeneralResponse(ConversationState state, String messageContent, 
-                                     String driverPhone, String orderId) {
-        
-        whatsAppService.sendTextMessage(driverPhone, 
-                "Thank you for your message. If you need to update your status, " +
-                "please contact our support team.", orderId);
     }
 
     /**
@@ -214,109 +92,238 @@ public class MessageProcessingService {
     }
 
     /**
-     * Check if message contains positive response
+     * Extract contact name from webhook response
      */
-    private boolean containsPositiveResponse(String message) {
-        String lowerMessage = message.toLowerCase();
-        return lowerMessage.contains("yes") || 
-               lowerMessage.contains("on time") || 
-               lowerMessage.contains("okay") ||
-               lowerMessage.contains("ok") ||
-               lowerMessage.contains("fine") ||
-               lowerMessage.contains("good");
+    private String getContactName(WhatsAppWebhookResponse.Contact contact) {
+        if (contact != null && contact.getName() != null && !contact.getName().trim().isEmpty()) {
+            return contact.getName().trim();
+        }
+        return "Driver"; // Default fallback name
     }
 
     /**
-     * Check if message contains negative response
+     * Extract message type from webhook response
      */
-    private boolean containsNegativeResponse(String message) {
-        String lowerMessage = message.toLowerCase();
-        return lowerMessage.contains("no") || 
-               lowerMessage.contains("late") || 
-               lowerMessage.contains("delay") ||
-               lowerMessage.contains("behind") ||
-               lowerMessage.contains("problem");
+    private String getMessageType(WhatsAppWebhookResponse.MessageContent message) {
+        if (message != null && message.getType() != null && !message.getType().trim().isEmpty()) {
+            return message.getType().toLowerCase(); // Convert to lowercase for API consistency
+        }
+        return "text"; // Default fallback type
     }
 
     /**
-     * Check if message contains traffic-related keywords
+     * Extract platform from integration type
      */
-    private boolean containsTrafficKeywords(String message) {
-        String lowerMessage = message.toLowerCase();
-        return lowerMessage.contains("traffic") || 
-               lowerMessage.contains("jam") || 
-               lowerMessage.contains("road") ||
-               lowerMessage.contains("congestion");
+    private String getPlatform(String integrationType) {
+        if (integrationType != null && !integrationType.trim().isEmpty()) {
+            // Convert to proper case for API
+            return integrationType.toLowerCase().substring(0, 1).toUpperCase() + 
+                   integrationType.toLowerCase().substring(1);
+        }
+        return "Whatsapp"; // Default fallback platform
     }
 
     /**
-     * Check if message contains breakdown-related keywords
+     * Parse receivedAt timestamp from webhook response
+     * Format: 2025-01-01T10:10:00.000+0000
      */
-    private boolean containsBreakdownKeywords(String message) {
-        String lowerMessage = message.toLowerCase();
-        return lowerMessage.contains("breakdown") || 
-               lowerMessage.contains("break down") || 
-               lowerMessage.contains("vehicle") ||
-               lowerMessage.contains("truck") ||
-               lowerMessage.contains("engine") ||
-               lowerMessage.contains("tire") ||
-               lowerMessage.contains("mechanical");
+    private long parseReceivedAtTimestamp(String receivedAt) {
+        if (receivedAt == null || receivedAt.trim().isEmpty()) {
+            log.warn("No receivedAt timestamp provided, using current time");
+            return System.currentTimeMillis();
+        }
+        
+        try {
+            // Normalize timezone format for Java parsing
+            String normalizedTimestamp = normalizeTimestampFormat(receivedAt);
+            
+            // Parse ISO 8601 timestamp to milliseconds
+            Instant instant = Instant.parse(normalizedTimestamp);
+            long timestamp = instant.toEpochMilli();
+            log.debug("Parsed timestamp '{}' (normalized: '{}') to {}", receivedAt, normalizedTimestamp, timestamp);
+            return timestamp;
+        } catch (DateTimeParseException e) {
+            log.warn("Failed to parse receivedAt timestamp '{}': {}. Using current time.", receivedAt, e.getMessage());
+            return System.currentTimeMillis();
+        }
     }
 
     /**
-     * Extract time from message using regex
+     * Normalize timestamp format to be compatible with Java's Instant.parse()
+     * Converts: 2025-01-01T10:10:00.000+0000 → 2025-01-01T10:10:00.000Z
+     * Converts: 2025-01-01T10:10:00.000+0500 → 2025-01-01T10:10:00.000+05:00
      */
-    private String extractTimeFromMessage(String message) {
-        // Patterns for different time formats
-        Pattern[] timePatterns = {
-            Pattern.compile("\\b(\\d{1,2}:\\d{2}\\s*(?:AM|PM))\\b", Pattern.CASE_INSENSITIVE),
-            Pattern.compile("\\b(\\d{1,2}:\\d{2})\\b"),
-            Pattern.compile("\\b(\\d{1,2}\\s*(?:AM|PM))\\b", Pattern.CASE_INSENSITIVE),
-            Pattern.compile("\\b(\\d{1,2}\\.\\d{2})\\b")
-        };
+    private String normalizeTimestampFormat(String timestamp) {
+        if (timestamp == null) {
+            return timestamp;
+        }
+        
+        // Handle UTC timezone: +0000 or -0000 → Z
+        if (timestamp.endsWith("+0000") || timestamp.endsWith("-0000")) {
+            return timestamp.substring(0, timestamp.length() - 5) + "Z";
+        }
+        
+        // Handle other timezones: +0500 → +05:00, -0300 → -03:00
+        if (timestamp.matches(".*[+-]\\d{4}$")) {
+            String base = timestamp.substring(0, timestamp.length() - 5);
+            String sign = timestamp.substring(timestamp.length() - 5, timestamp.length() - 4);
+            String hours = timestamp.substring(timestamp.length() - 4, timestamp.length() - 2);
+            String minutes = timestamp.substring(timestamp.length() - 2);
+            return base + sign + hours + ":" + minutes;
+        }
+        
+        // Return as-is if already in correct format
+        return timestamp;
+    }
 
-        for (Pattern pattern : timePatterns) {
-            Matcher matcher = pattern.matcher(message);
-            if (matcher.find()) {
-                return matcher.group(1);
+    /**
+     * Cleanup expired conversation for a driver if timeout exceeded
+     */
+    private void cleanupExpiredConversation(String driverPhone) {
+        Long lastTimestamp = lastMessageTimestamps.get(driverPhone);
+        if (lastTimestamp != null) {
+            long timeSinceLastMessage = System.currentTimeMillis() - lastTimestamp;
+            if (timeSinceLastMessage > CONVERSATION_TIMEOUT_MS) {
+                log.info("🧹 Conversation expired for driver {} (inactive for {} minutes). Resetting conversation.", 
+                        driverPhone, timeSinceLastMessage / (60 * 1000));
+                
+                // Reset chat module conversation
+                chatModuleService.resetConversation(driverPhone);
+                
+                // Remove timestamp tracking
+                lastMessageTimestamps.remove(driverPhone);
+                
+                log.debug("✅ Expired conversation cleaned up for driver: {}", driverPhone);
+            } else {
+                log.debug("⏰ Conversation for driver {} still active (last activity {} minutes ago)", 
+                        driverPhone, timeSinceLastMessage / (60 * 1000));
+            }
+        } else {
+            log.debug("🆕 New conversation starting for driver: {}", driverPhone);
+        }
+    }
+
+    /**
+     * Reset conversation for a driver (for testing or when conversation should restart)
+     */
+    public void resetConversationState(String driverPhone) {
+        log.info("🔄 Resetting conversation for driver: {}", driverPhone);
+        
+        // Reset chat module conversation
+        chatModuleService.resetConversation(driverPhone);
+        
+        // Clear timestamp tracking
+        lastMessageTimestamps.remove(driverPhone);
+        
+        log.info("✅ Conversation reset completed for driver: {}", driverPhone);
+    }
+
+    /**
+     * Get current chat module conversation ID for debugging
+     */
+    public String getCurrentChatConversationId(String driverPhone) {
+        return chatModuleService.getCurrentConversationId(driverPhone);
+    }
+
+    /**
+     * Health check method to verify chat module integration
+     */
+    public boolean isChatModuleHealthy() {
+        try {
+            // Test with a simple message to check if chat module is responding
+            String testResponse = chatModuleService.sendMessageToChatModule(
+                "test_health_check", 
+                "TestDriver",
+                "Hello", 
+                "health_check_" + System.currentTimeMillis(), 
+                System.currentTimeMillis(),
+                "text", // Default message type for health check
+                "Whatsapp" // Default platform for health check
+            );
+            return testResponse != null && !testResponse.contains("having trouble");
+        } catch (Exception e) {
+            log.error("Chat module health check failed: {}", e.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Get conversation status for a driver including timeout info
+     */
+    public ConversationStatus getConversationStatus(String driverPhone) {
+        Long lastTimestamp = lastMessageTimestamps.get(driverPhone);
+        String conversationId = chatModuleService.getCurrentConversationId(driverPhone);
+        
+        if (lastTimestamp == null) {
+            return new ConversationStatus(driverPhone, false, null, 0, false, conversationId);
+        }
+        
+        long timeSinceLastMessage = System.currentTimeMillis() - lastTimestamp;
+        boolean isActive = timeSinceLastMessage <= CONVERSATION_TIMEOUT_MS;
+        long minutesSinceLastMessage = timeSinceLastMessage / (60 * 1000);
+        
+        return new ConversationStatus(driverPhone, true, lastTimestamp, minutesSinceLastMessage, isActive, conversationId);
+    }
+
+    /**
+     * Get current timeout configuration in minutes
+     */
+    public long getConversationTimeoutMinutes() {
+        return CONVERSATION_TIMEOUT_MS / (60 * 1000);
+    }
+
+    /**
+     * Force cleanup of all expired conversations (useful for maintenance)
+     */
+    public int cleanupAllExpiredConversations() {
+        log.info("🧹 Starting cleanup of all expired conversations...");
+        int cleanedUp = 0;
+        
+        // Create a copy of the keys to avoid concurrent modification
+        for (String driverPhone : lastMessageTimestamps.keySet().toArray(new String[0])) {
+            Long lastTimestamp = lastMessageTimestamps.get(driverPhone);
+            if (lastTimestamp != null) {
+                long timeSinceLastMessage = System.currentTimeMillis() - lastTimestamp;
+                if (timeSinceLastMessage > CONVERSATION_TIMEOUT_MS) {
+                    log.debug("Cleaning up expired conversation for driver: {}", driverPhone);
+                    chatModuleService.resetConversation(driverPhone);
+                    lastMessageTimestamps.remove(driverPhone);
+                    cleanedUp++;
+                }
             }
         }
-        return null;
+        
+        log.info("✅ Cleanup completed. {} expired conversations removed.", cleanedUp);
+        return cleanedUp;
     }
 
     /**
-     * Conversation state enum
+     * Conversation status information class
      */
-    public enum ConversationStep {
-        INITIAL_ETA_CHECK,
-        WAITING_FOR_ISSUE_TYPE,
-        WAITING_FOR_NEW_ETA,
-        WAITING_FOR_BREAKDOWN_DETAILS,
-        COMPLETED
-    }
-
-    /**
-     * Conversation state class
-     */
-    public static class ConversationState {
+    public static class ConversationStatus {
         private String driverPhone;
-        private String orderId;
-        private ConversationStep currentStep;
+        private boolean hasConversation;
+        private Long lastMessageTimestamp;
+        private long minutesSinceLastMessage;
+        private boolean isActive;
+        private String conversationId;
 
-        public ConversationState(String driverPhone, String orderId) {
+        public ConversationStatus(String driverPhone, boolean hasConversation, Long lastMessageTimestamp, 
+                                long minutesSinceLastMessage, boolean isActive, String conversationId) {
             this.driverPhone = driverPhone;
-            this.orderId = orderId;
-            this.currentStep = ConversationStep.INITIAL_ETA_CHECK;
+            this.hasConversation = hasConversation;
+            this.lastMessageTimestamp = lastMessageTimestamp;
+            this.minutesSinceLastMessage = minutesSinceLastMessage;
+            this.isActive = isActive;
+            this.conversationId = conversationId;
         }
 
-        // Getters and setters
+        // Getters
         public String getDriverPhone() { return driverPhone; }
-        public void setDriverPhone(String driverPhone) { this.driverPhone = driverPhone; }
-        
-        public String getOrderId() { return orderId; }
-        public void setOrderId(String orderId) { this.orderId = orderId; }
-        
-        public ConversationStep getCurrentStep() { return currentStep; }
-        public void setCurrentStep(ConversationStep currentStep) { this.currentStep = currentStep; }
+        public boolean isHasConversation() { return hasConversation; }
+        public Long getLastMessageTimestamp() { return lastMessageTimestamp; }
+        public long getMinutesSinceLastMessage() { return minutesSinceLastMessage; }
+        public boolean isActive() { return isActive; }
+        public String getConversationId() { return conversationId; }
     }
 } 
