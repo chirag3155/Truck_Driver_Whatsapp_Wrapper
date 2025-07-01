@@ -1,0 +1,233 @@
+{
+  "webhookEndpoint": "POST http://localhost:8080/whatsapp/callback",
+  "description": "Request body samples that Infobip would send when drivers respond via WhatsApp",
+  
+  "samples": {
+    
+    "1_driver_says_yes": {
+      "description": "Driver responds 'Yes I am on time'",
+      "requestBody": {
+        "results": [
+          {
+            "from": "971526328601",
+            "to": "919601112550",
+            "messageId": "ORD987654321",
+            "receivedAt": "2025-06-30T09:30:00",
+            "message": {
+              "type": "text",
+              "text": "Yes I am on time"
+            },
+            "context": {
+              "from": "971526328601",
+              "id": "msg123456",
+              "groupId": "group123"
+            }
+          }
+        ]
+      }
+    },
+    
+    "2_driver_says_no": {
+      "description": "Driver responds 'I am late'",
+      "requestBody": {
+        "results": [
+          {
+            "from": "971526328601", 
+            "to": "919601112550",
+            "messageId": "ORD987654321",
+            "receivedAt": "2025-06-30T09:35:00",
+            "message": {
+              "type": "text",
+              "text": "I am late"
+            },
+            "context": {
+              "from": "971526328601",
+              "id": "msg123457",
+              "groupId": "group123"
+            }
+          }
+        ]
+      }
+    },
+    
+    "3_driver_selects_traffic": {
+      "description": "Driver selects option 1 (Traffic delay)",
+      "requestBody": {
+        "results": [
+          {
+            "from": "971526328601",
+            "to": "919601112550", 
+            "messageId": "ORD987654321",
+            "receivedAt": "2025-06-30T09:40:00",
+            "message": {
+              "type": "text",
+              "text": "1"
+            },
+            "context": {
+              "from": "971526328601",
+              "id": "msg123458",
+              "groupId": "group123"
+            }
+          }
+        ]
+      }
+    },
+    
+    "4_driver_provides_new_eta": {
+      "description": "Driver provides new ETA time",
+      "requestBody": {
+        "results": [
+          {
+            "from": "971526328601",
+            "to": "919601112550",
+            "messageId": "ORD987654321", 
+            "receivedAt": "2025-06-30T09:45:00",
+            "message": {
+              "type": "text",
+              "text": "10:30 AM"
+            },
+            "context": {
+              "from": "971526328601",
+              "id": "msg123459",
+              "groupId": "group123"
+            }
+          }
+        ]
+      }
+    },
+    
+    "5_driver_selects_breakdown": {
+      "description": "Driver selects option 2 (Vehicle breakdown)",
+      "requestBody": {
+        "results": [
+          {
+            "from": "971526328601",
+            "to": "919601112550",
+            "messageId": "ORD987654321",
+            "receivedAt": "2025-06-30T09:50:00",
+            "message": {
+              "type": "text", 
+              "text": "2"
+            },
+            "context": {
+              "from": "971526328601",
+              "id": "msg123460",
+              "groupId": "group123"
+            }
+          }
+        ]
+      }
+    },
+    
+    "6_driver_breakdown_details": {
+      "description": "Driver provides breakdown details",
+      "requestBody": {
+        "results": [
+          {
+            "from": "971526328601",
+            "to": "919601112550",
+            "messageId": "ORD987654321",
+            "receivedAt": "2025-06-30T09:55:00",
+            "message": {
+              "type": "text",
+              "text": "Engine overheating, waiting for roadside assistance"
+            },
+            "context": {
+              "from": "971526328601",
+              "id": "msg123461", 
+              "groupId": "group123"
+            }
+          }
+        ]
+      }
+    },
+    
+    "7_driver_random_message": {
+      "description": "Driver sends random message (tests default behavior)",
+      "requestBody": {
+        "results": [
+          {
+            "from": "971526328601",
+            "to": "919601112550",
+            "messageId": "ORD987654321",
+            "receivedAt": "2025-06-30T10:00:00",
+            "message": {
+              "type": "text",
+              "text": "Hello, how are you?"
+            },
+            "context": {
+              "from": "971526328601",
+              "id": "msg123462",
+              "groupId": "group123"
+            }
+          }
+        ]
+      }
+    },
+    
+    "8_multiple_messages": {
+      "description": "Multiple drivers responding at once",
+      "requestBody": {
+        "results": [
+          {
+            "from": "971526328601",
+            "to": "919601112550",
+            "messageId": "ORD987654321",
+            "receivedAt": "2025-06-30T10:05:00",
+            "message": {
+              "type": "text",
+              "text": "Yes I am on time"
+            },
+            "context": {
+              "from": "971526328601",
+              "id": "msg123463",
+              "groupId": "group123"
+            }
+          },
+          {
+            "from": "971555123456",
+            "to": "919601112550", 
+            "messageId": "ORD987654322",
+            "receivedAt": "2025-06-30T10:05:30",
+            "message": {
+              "type": "text",
+              "text": "I am late"
+            },
+            "context": {
+              "from": "971555123456",
+              "id": "msg123464",
+              "groupId": "group124"
+            }
+          }
+        ]
+      }
+    }
+  },
+  
+  "fieldExplanations": {
+    "from": "Driver's WhatsApp phone number (with country code)",
+    "to": "Your WhatsApp Business number (Infobip sender)",
+    "messageId": "Order ID or message identifier",
+    "receivedAt": "Timestamp when message was received (ISO format)",
+    "message.type": "Message type - usually 'text' for text messages",
+    "message.text": "Actual message content from driver", 
+    "context.from": "Same as 'from' field",
+    "context.id": "Unique message ID from WhatsApp",
+    "context.groupId": "Group conversation ID (if applicable)"
+  },
+  
+  "curlExamples": [
+    {
+      "name": "Driver says Yes",
+      "command": "curl -X POST 'http://localhost:8080/whatsapp/callback' -H 'Content-Type: application/json' -d '{\"results\":[{\"from\":\"971526328601\",\"to\":\"919601112550\",\"messageId\":\"ORD987654321\",\"receivedAt\":\"2025-06-30T09:30:00\",\"message\":{\"type\":\"text\",\"text\":\"Yes I am on time\"},\"context\":{\"from\":\"971526328601\",\"id\":\"msg123456\",\"groupId\":\"group123\"}}]}'"
+    },
+    {
+      "name": "Driver says No", 
+      "command": "curl -X POST 'http://localhost:8080/whatsapp/callback' -H 'Content-Type: application/json' -d '{\"results\":[{\"from\":\"971526328601\",\"to\":\"919601112550\",\"messageId\":\"ORD987654321\",\"receivedAt\":\"2025-06-30T09:35:00\",\"message\":{\"type\":\"text\",\"text\":\"I am late\"},\"context\":{\"from\":\"971526328601\",\"id\":\"msg123457\",\"groupId\":\"group123\"}}]}'"
+    },
+    {
+      "name": "Driver provides ETA",
+      "command": "curl -X POST 'http://localhost:8080/whatsapp/callback' -H 'Content-Type: application/json' -d '{\"results\":[{\"from\":\"971526328601\",\"to\":\"919601112550\",\"messageId\":\"ORD987654321\",\"receivedAt\":\"2025-06-30T09:45:00\",\"message\":{\"type\":\"text\",\"text\":\"10:30 AM\"},\"context\":{\"from\":\"971526328601\",\"id\":\"msg123459\",\"groupId\":\"group123\"}}]}'"
+    }
+  ]
+} 
