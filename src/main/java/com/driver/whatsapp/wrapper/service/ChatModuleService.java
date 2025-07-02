@@ -91,17 +91,24 @@ public class ChatModuleService {
             }
 
         } catch (org.springframework.web.client.ResourceAccessException e) {
-            log.error("Chat module API timeout for driver {}: {}", driverPhone, e.getMessage());
-            return "I'm taking longer than expected to respond. Please try again in a moment.";
+            // API timeout or connection issues
+            log.error("Chat module API timeout/connection error for driver {}: {}", driverPhone, e.getMessage());
+            return "I'm having connection issues right now. Please try again in a moment.";
+            
         } catch (org.springframework.web.client.HttpClientErrorException e) {
+            // Client error (4xx) 
             log.error("Chat module client error for driver {}: {} - {}", driverPhone, e.getStatusCode(), e.getResponseBodyAsString());
-            return "I encountered an error processing your request. Please try again.";
+            return "There was an issue with your request. Please try again.";
+            
         } catch (org.springframework.web.client.HttpServerErrorException e) {
+            // Server error (5xx)
             log.error("Chat module server error for driver {}: {} - {}", driverPhone, e.getStatusCode(), e.getResponseBodyAsString());
-            return "The service is temporarily unavailable. Please try again in a few minutes.";
+            return "Our chat service is temporarily down. Please try again in a few minutes.";
+            
         } catch (Exception e) {
+            // Any other unexpected error
             log.error("Unexpected error calling chat module for driver {}: {}", driverPhone, e.getMessage(), e);
-            return "Sorry, I'm having trouble responding right now. Please try again later.";
+            return "Sorry, something went wrong. Please try again later.";
         }
     }
 

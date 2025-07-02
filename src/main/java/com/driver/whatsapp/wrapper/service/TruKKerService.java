@@ -130,11 +130,32 @@ public class TruKKerService {
 
     /**
      * Log what would be sent to TruKKer API (API integration not implemented yet)
+     * TODO: When implementing real TruKKer API, add proper exception handling like WhatsAppService
      */
     private void sendUpdateToTruKKer(TruKKerUpdateRequest request, String endpoint) {
         try {
             String jsonBody = objectMapper.writeValueAsString(request);
             
+            // TODO: Replace this simulation with real API call:
+            /*
+            String url = truKKerApiUrl + endpoint;
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            headers.set("Authorization", "Bearer " + truKKerApiKey);
+            
+            HttpEntity<String> entity = new HttpEntity<>(jsonBody, headers);
+            ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.POST, entity, String.class);
+            
+            if (response.getStatusCode().is2xxSuccessful()) {
+                log.info("TruKKer API update successful: {}", response.getBody());
+            } else {
+                log.error("TruKKer API returned error: Status: {}, Body: {}", 
+                         response.getStatusCode(), response.getBody());
+                handleTruKKerFailure(request, "API Error: " + response.getStatusCode());
+            }
+            */
+            
+            // Current simulation code:
             log.info("=== TruKKer API Update (SIMULATION) ===");
             log.info("Endpoint: {}", endpoint);
             log.info("Request Body: {}", jsonBody);
@@ -143,8 +164,25 @@ public class TruKKerService {
             
         } catch (Exception e) {
             log.error("Error creating TruKKer update request: {}", e.getMessage(), e);
+            // TODO: Add specific exception handling for real API calls:
+            // - ResourceAccessException (timeouts)
+            // - HttpClientErrorException (4xx errors)  
+            // - HttpServerErrorException (5xx errors)
         }
     }
+    
+    // TODO: Add this method when implementing real TruKKer API
+    /*
+    private void handleTruKKerFailure(TruKKerUpdateRequest request, String errorReason) {
+        log.error("CRITICAL: TruKKer update failed for order {}: {} - Request: {}", 
+                 request.getOrderId(), errorReason, request);
+        
+        // Implement fallback mechanisms:
+        // 1. Store failed update for retry
+        // 2. Alert operations team
+        // 3. Send email notification
+    }
+    */
 
     /**
      * Get current timestamp in ISO format

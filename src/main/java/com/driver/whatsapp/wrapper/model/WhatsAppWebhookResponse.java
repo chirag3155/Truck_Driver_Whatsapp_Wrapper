@@ -4,12 +4,14 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.AllArgsConstructor;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
 import java.util.List;
 
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class WhatsAppWebhookResponse {
     
     @JsonProperty("results")
@@ -24,6 +26,7 @@ public class WhatsAppWebhookResponse {
     @Data
     @NoArgsConstructor
     @AllArgsConstructor
+    @JsonIgnoreProperties(ignoreUnknown = true)
     public static class Result {
         @JsonProperty("from")
         private String from;
@@ -56,6 +59,7 @@ public class WhatsAppWebhookResponse {
     @Data
     @NoArgsConstructor
     @AllArgsConstructor
+    @JsonIgnoreProperties(ignoreUnknown = true)
     public static class MessageContent {
         @JsonProperty("text")
         private String text;
@@ -67,6 +71,7 @@ public class WhatsAppWebhookResponse {
     @Data
     @NoArgsConstructor
     @AllArgsConstructor
+    @JsonIgnoreProperties(ignoreUnknown = true)
     public static class Price {
         @JsonProperty("pricePerMessage")
         private Double pricePerMessage;
@@ -78,6 +83,7 @@ public class WhatsAppWebhookResponse {
     @Data
     @NoArgsConstructor
     @AllArgsConstructor
+    @JsonIgnoreProperties(ignoreUnknown = true)
     public static class Contact {
         @JsonProperty("name")
         private String name;

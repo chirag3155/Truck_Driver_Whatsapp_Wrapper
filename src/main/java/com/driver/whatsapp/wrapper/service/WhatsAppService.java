@@ -42,11 +42,22 @@ public class WhatsAppService {
      */
     public void sendInitialDriverMessage(DriverDetails driverDetails) {
         try {
+            log.info("Sending initial template message to driver: {} for order: {}", 
+                    driverDetails.getDriverPhone(), driverDetails.getOrderId());
+            
             WhatsAppMessage message = buildTemplatedMessage(driverDetails);
             sendMessage(message, "/whatsapp/1/message/template");
-            log.info("Initial message sent to driver: {}", driverDetails.getDriverPhone());
+            
+            log.info("Initial template message sent successfully to driver: {} for order: {}", 
+                    driverDetails.getDriverPhone(), driverDetails.getOrderId());
+                    
         } catch (Exception e) {
-            log.error("Error sending initial message to driver: {}", e.getMessage(), e);
+            log.error("CRITICAL: Failed to send initial template message to driver {} for order {}: {}", 
+                     driverDetails.getDriverPhone(), driverDetails.getOrderId(), e.getMessage(), e);
+            
+            // This is critical - if initial message fails, the whole workflow stops
+            log.error("ALERT: Driver {} will not receive any communication for order {}!", 
+                     driverDetails.getDriverPhone(), driverDetails.getOrderId());
         }
     }
 
@@ -126,7 +137,7 @@ public class WhatsAppService {
                 .messageId(driverDetails.getOrderId())
                 .content(content)
                 .callbackData("initial_eta_check")
-                .notifyUrl(webhookUrl + "/whatsapp/callback")
+                // .notifyUrl(webhookUrl + "/whatsapp/callback")
                 .build();
 
                 log.info("notifyUrl: {}", webhookUrl + "/whatsapp/callback");
@@ -150,10 +161,10 @@ public class WhatsAppService {
                 .messageId(orderId)
                 .content(content)
                 .callbackData("text_message")
-                .notifyUrl(webhookUrl + "/whatsapp/callback")
+                // .notifyUrl(webhookUrl + "/whatsapp/callback")
                 .build();
                 
-        log.info("notifyUrl: {}", webhookUrl + "/whatsapp/callback");
+        // log.info("notifyUrl: {}", webhookUrl + "/whatsapp/callback");
         return message;
     }
 
@@ -175,13 +186,52 @@ public class WhatsAppService {
             ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.POST, entity, String.class);
             
             if (response.getStatusCode().is2xxSuccessful()) {
-                log.info("Message sent successfully: {}", response.getBody());
+                log.info("Message sent successfully to {}: {}", message.getTo(), response.getBody());
             } else {
-                log.error("Error sending message. Status: {}, Body: {}", response.getStatusCode(), response.getBody());
+                log.error("WhatsApp API returned error for {}: Status: {}, Body: {}", 
+                         message.getTo(), response.getStatusCode(), response.getBody());
+                handleWhatsAppFailure(message, "API Error: " + response.getStatusCode());
             }
+            
+        } catch (org.springframework.web.client.ResourceAccessException e) {
+            // Network/connection issues
+            log.error("WhatsApp API connection failed for {}: {}", message.getTo(), e.getMessage());
+            handleWhatsAppFailure(message, "Connection failed: " + e.getMessage());
+            
+        } catch (org.springframework.web.client.HttpClientErrorException e) {
+            // 4xx errors
+            log.error("WhatsApp API client error for {}: {} - {}", 
+                     message.getTo(), e.getStatusCode(), e.getResponseBodyAsString());
+            handleWhatsAppFailure(message, "Client error: " + e.getStatusCode());
+            
+        } catch (org.springframework.web.client.HttpServerErrorException e) {
+            // 5xx errors  
+            log.error("WhatsApp API server error for {}: {} - {}", 
+                     message.getTo(), e.getStatusCode(), e.getResponseBodyAsString());
+            handleWhatsAppFailure(message, "Server error: " + e.getStatusCode());
+            
         } catch (Exception e) {
-            log.error("Exception while sending message: {}", e.getMessage(), e);
+            log.error("Unexpected error sending WhatsApp message to {}: {}", message.getTo(), e.getMessage(), e);
+            handleWhatsAppFailure(message, "Unexpected error: " + e.getMessage());
         }
+    }
+    
+    /**
+     * Handle WhatsApp API failures - implement fallback mechanisms
+     */
+    private void handleWhatsAppFailure(WhatsAppMessage.SimpleTextMessage message, String errorReason) {
+        log.warn("WhatsApp message failed for driver {}: {} - Message: {}", 
+                message.getTo(), errorReason, message.getContent().getText());
+        
+        // TODO: Implement fallback mechanisms:
+        // 1. Store message for retry later
+        // 2. Send SMS as backup
+        // 3. Send email notification
+        // 4. Alert operations team
+        
+        // For now, just log the failure
+        log.error("CRITICAL: Driver {} did not receive message: '{}'", 
+                 message.getTo(), message.getContent().getText());
     }
 
     /**
@@ -201,12 +251,55 @@ public class WhatsAppService {
             ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.POST, entity, String.class);
             
             if (response.getStatusCode().is2xxSuccessful()) {
-                log.info("Message sent successfully: {}", response.getBody());
+                log.info("Templated message sent successfully: {}", response.getBody());
             } else {
-                log.error("Error sending message. Status: {}, Body: {}", response.getStatusCode(), response.getBody());
+                log.error("WhatsApp API returned error for templated message: Status: {}, Body: {}", 
+                         response.getStatusCode(), response.getBody());
+                handleTemplateMessageFailure(message, "API Error: " + response.getStatusCode());
             }
+            
+        } catch (org.springframework.web.client.ResourceAccessException e) {
+            // Network/connection issues
+            log.error("WhatsApp API connection failed for templated message: {}", e.getMessage());
+            handleTemplateMessageFailure(message, "Connection failed: " + e.getMessage());
+            
+        } catch (org.springframework.web.client.HttpClientErrorException e) {
+            // 4xx errors
+            log.error("WhatsApp API client error for templated message: {} - {}", 
+                     e.getStatusCode(), e.getResponseBodyAsString());
+            handleTemplateMessageFailure(message, "Client error: " + e.getStatusCode());
+            
+        } catch (org.springframework.web.client.HttpServerErrorException e) {
+            // 5xx errors  
+            log.error("WhatsApp API server error for templated message: {} - {}", 
+                     e.getStatusCode(), e.getResponseBodyAsString());
+            handleTemplateMessageFailure(message, "Server error: " + e.getStatusCode());
+            
         } catch (Exception e) {
-            log.error("Exception while sending message: {}", e.getMessage(), e);
+            log.error("Unexpected error sending templated WhatsApp message: {}", e.getMessage(), e);
+            handleTemplateMessageFailure(message, "Unexpected error: " + e.getMessage());
         }
+    }
+    
+    /**
+     * Handle template message failures - critical since this starts the conversation
+     */
+    private void handleTemplateMessageFailure(WhatsAppMessage message, String errorReason) {
+        // Extract driver phone from the first message in the array
+        String driverPhone = message.getMessages().get(0).getTo();
+        String orderId = message.getMessages().get(0).getMessageId();
+        
+        log.error("CRITICAL: Initial template message failed for driver {}: {} - Order: {}", 
+                 driverPhone, errorReason, orderId);
+        
+        // TODO: Implement fallback mechanisms for initial message:
+        // 1. Store failed initial message for retry
+        // 2. Send simple text message as fallback instead of template
+        // 3. Alert operations team immediately (this is critical!)
+        // 4. Send SMS as backup
+        
+        // For now, just log the critical failure
+        log.error("ALERT: Driver {} never received initial message for order {}. Conversation will not start!", 
+                 driverPhone, orderId);
     }
 } 

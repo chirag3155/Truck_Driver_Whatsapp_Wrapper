@@ -73,7 +73,6 @@ public class WhatsAppWebhookController {
             )
         )
     })
-    
     @PostMapping("/callback")
     public ResponseEntity<Map<String, String>> receiveInboundMessage(@RequestBody String messageData) {
         try {
