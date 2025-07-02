@@ -1,5 +1,6 @@
 package com.driver.whatsapp.wrapper.service;
 
+import com.driver.whatsapp.wrapper.constants.ConfigurationConstants;
 import com.driver.whatsapp.wrapper.model.DriverDetails;
 import com.driver.whatsapp.wrapper.model.WhatsAppMessage;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -45,6 +46,14 @@ public class WhatsAppService {
             log.info("Sending initial template message to driver: {} for order: {}", 
                     driverDetails.getDriverPhone(), driverDetails.getOrderId());
             
+            // Get API assistant mapping for driver_details WhatsApp
+            String tenantId = ConfigurationCacheService.getTenantId("driver_details", "whatsapp");
+            String assistantId = ConfigurationCacheService.getAssistantId("driver_details", "whatsapp");
+            
+            if (tenantId != null && assistantId != null) {
+                log.info("Using tenant: {}, assistant: {} for driver_details WhatsApp", tenantId, assistantId);
+            }
+            
             WhatsAppMessage message = buildTemplatedMessage(driverDetails);
             sendMessage(message, "/whatsapp/1/message/template");
             
@@ -78,7 +87,17 @@ public class WhatsAppService {
      * Send follow-up message for new ETA
      */
     public void sendNewEtaRequest(String driverPhone, String orderId) {
-        String message = "We understand you're facing a delay. Please provide your new estimated arrival time (e.g., 10:30 AM).";
+        // Get configured message template
+        String message = ConfigurationCacheService.getConfigValue(
+            ConfigurationConstants.NEW_ETA_MESSAGE, 
+            "We understand you're facing a delay. Please provide your new estimated arrival time (e.g., 10:30 AM)."
+        );
+        
+        // Get API assistant mapping for ETA update
+        String tenantId = ConfigurationCacheService.getTenantId("eta_update", "whatsapp");
+        String assistantId = ConfigurationCacheService.getAssistantId("eta_update", "whatsapp");
+        
+        log.info("Sending ETA request using tenant: {}, assistant: {}", tenantId, assistantId);
         sendTextMessage(driverPhone, message, orderId);
     }
 
@@ -101,14 +120,20 @@ public class WhatsAppService {
      * Build templated message for initial driver contact
      */
     private WhatsAppMessage buildTemplatedMessage(DriverDetails driverDetails) {
+        // Get button text from configuration
+        String yesButtonText = ConfigurationCacheService.getConfigValue(
+            ConfigurationConstants.YES_BUTTON_TEXT, "Yes I am on time");
+        String noButtonText = ConfigurationCacheService.getConfigValue(
+            ConfigurationConstants.NO_BUTTON_TEXT, "I am late");
+            
         WhatsAppMessage.Button yesButton = WhatsAppMessage.Button.builder()
                 .type("QUICK_REPLY")
-                .parameter("Yes I am on time")
+                .parameter(yesButtonText)
                 .build();
 
         WhatsAppMessage.Button noButton = WhatsAppMessage.Button.builder()
                 .type("QUICK_REPLY")
-                .parameter("I am late")
+                .parameter(noButtonText)
                 .build();
 
         WhatsAppMessage.Body body = WhatsAppMessage.Body.builder()
@@ -125,18 +150,28 @@ public class WhatsAppService {
                 .buttons(Arrays.asList(yesButton, noButton))
                 .build();
 
+        // Get template configuration
+        String templateName = ConfigurationCacheService.getConfigValue(
+            ConfigurationConstants.WHATSAPP_TEMPLATE_NAME, "11_start_time_due");
+        String templateLanguage = ConfigurationCacheService.getConfigValue(
+            ConfigurationConstants.TEMPLATE_LANGUAGE, "en");
+
         WhatsAppMessage.Content content = WhatsAppMessage.Content.builder()
-                .templateName("11_start_time_due")
+                .templateName(templateName)
                 .templateData(templateData)
-                .language("en")
+                .language(templateLanguage)
                 .build();
+
+        // Get callback data configuration
+        String callbackData = ConfigurationCacheService.getConfigValue(
+            ConfigurationConstants.INITIAL_CALLBACK_DATA, "initial_eta_check");
 
         WhatsAppMessage.Message messageItem = WhatsAppMessage.Message.builder()
                 .from(whatsappFromNumber)
                 .to(driverDetails.getDriverPhone())
                 .messageId(driverDetails.getOrderId())
                 .content(content)
-                .callbackData("initial_eta_check")
+                .callbackData(callbackData)
                 // .notifyUrl(webhookUrl + "/whatsapp/callback")
                 .build();
 
