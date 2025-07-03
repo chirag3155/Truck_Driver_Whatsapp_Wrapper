@@ -1,6 +1,12 @@
 package com.driver.whatsapp.wrapper.service;
 
 import com.driver.whatsapp.wrapper.model.WhatsAppWebhookResponse;
+import com.driver.whatsapp.wrapper.repository.ApiAssistantMappingRepository;
+import com.driver.whatsapp.wrapper.repository.TransactionDetailRepository;
+import com.driver.whatsapp.wrapper.entity.ApiAssistantMapping;
+import com.driver.whatsapp.wrapper.entity.ApiAssistantMappingId;
+import com.driver.whatsapp.wrapper.entity.TransactionDetail;
+
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -9,6 +15,7 @@ import java.time.Instant;
 import java.time.format.DateTimeParseException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.Map;
+import java.util.Optional;
 
 @Service
 @Slf4j
@@ -19,6 +26,12 @@ public class MessageProcessingService {
 
     @Autowired
     private ChatModuleService chatModuleService;
+
+    @Autowired
+    private ApiAssistantMappingRepository apiAssistantMappingRepository;
+
+    @Autowired
+    private TransactionDetailRepository transactionDetailRepository;
 
     // Conversation timeout configuration (30 minutes by default)
     private static final long CONVERSATION_TIMEOUT_MS = 30 * 60 * 1000L; // 30 minutes
@@ -42,8 +55,21 @@ public class MessageProcessingService {
             log.info("Processing message from driver: {} ({}), Content: '{}', Type: {}, Platform: {}, Timestamp: {}", 
                     driverPhone, driverName, messageContent, messageType, platform, timestamp);
 
+
+            Optional<TransactionDetail> transactionDetail = transactionDetailRepository.findMostRecentOpenConversation(driverPhone);
+
+            String conversationId = transactionDetail.get().getConversationId();
+            String flowName = transactionDetail.get().getFlowName();
+            String communicationMode = transactionDetail.get().getCommunicationMode();
+
+            ApiAssistantMapping apiAssistantMapping = apiAssistantMappingRepository.findById(new ApiAssistantMappingId(flowName, communicationMode))
+                .orElseThrow(() -> new RuntimeException("Api Assistant Mapping not found for flow: " + flowName + " and mode: " + communicationMode));
+
+            String tenantId = apiAssistantMapping.getTenantId();
+            String assistantId = apiAssistantMapping.getAssistantId();
+            
             // Check and cleanup expired conversation before processing new message
-            cleanupExpiredConversation(driverPhone);
+            // cleanupExpiredConversation(driverPhone);
 
             // Update last message timestamp for this driver
             lastMessageTimestamps.put(driverPhone, System.currentTimeMillis());
@@ -56,14 +82,17 @@ public class MessageProcessingService {
 
             try {
                 // Send message to chat module and get AI response
-                String aiResponse = chatModuleService.sendMessageToChatModule(
+                String aiResponse = chatModuleService.sendMessageToChatModuleWithConfig(
+                    conversationId,
                     driverPhone, 
                     driverName,
                     messageContent, 
                     messageId, 
                     timestamp,
                     messageType,
-                    platform
+                    platform,
+                    tenantId,
+                    assistantId
                 );
 
                 log.info("Received AI response for driver {}: {}", driverPhone, aiResponse);
@@ -232,13 +261,16 @@ public class MessageProcessingService {
         try {
             // Test with a simple message to check if chat module is responding
             String testResponse = chatModuleService.sendMessageToChatModule(
-                "test_health_check", 
-                "TestDriver",
-                "Hello", 
-                "health_check_" + System.currentTimeMillis(), 
-                System.currentTimeMillis(),
-                "text", // Default message type for health check
-                "Whatsapp" // Default platform for health check
+                "EG_TRU_a5d34a6f", // Default tenant ID for health check
+                "1123", // Default assistant ID for health check
+                "health_check_" + System.currentTimeMillis(), // Conversation ID
+                "test_health_check", // Driver phone
+                "TestDriver", // Driver name
+                "Hello", // Message content
+                "health_check_" + System.currentTimeMillis(), // Message ID
+                System.currentTimeMillis(), // Timestamp
+                "text", // Message type
+                "Whatsapp" // Platform
             );
             return testResponse != null && !testResponse.contains("having trouble");
         } catch (Exception e) {

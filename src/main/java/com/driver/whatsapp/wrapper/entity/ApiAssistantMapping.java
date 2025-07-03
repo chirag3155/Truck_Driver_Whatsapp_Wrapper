@@ -25,6 +25,9 @@ public class ApiAssistantMapping {
     @Column(name = "next_communication_mode", nullable = false, length = 50)
     private String nextCommunicationMode;
     
+    @Column(name = "template_message", nullable = true, columnDefinition = "JSON")
+    private String templateMessage;
+    
     /**
      * Get combined key for cache mapping (apiName_communicationMode)
      */

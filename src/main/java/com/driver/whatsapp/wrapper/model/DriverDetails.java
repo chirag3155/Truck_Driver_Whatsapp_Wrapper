@@ -55,7 +55,7 @@ public class DriverDetails {
     @JsonProperty("etaTime")
     @Schema(description = "Estimated time of arrival", example = "9:30 AM", required = true)
     private String etaTime;
-    
+     
     @NotBlank(message = "Driver phone is required")
     @JsonProperty("driverPhone")
     @Schema(description = "Driver's WhatsApp phone number (including country code)", example = "971526328601", required = true)

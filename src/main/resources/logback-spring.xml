@@ -2,7 +2,7 @@
 <configuration>
     
     <!-- Define log directory -->
-    <property name="LOG_DIR" value="logs"/>
+    <property name="LOG_DIR" value="/logs"/>
     
     <!-- Console Appender -->
     <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
@@ -48,7 +48,7 @@
         </encoder>
     </appender>
     
-    <!-- Root Logger - All logs go to single application.log file -->
+    <!-- Root Logger - All logs go to console, main file, and error file -->
     <root level="INFO">
         <appender-ref ref="CONSOLE"/>
         <appender-ref ref="APPLICATION_FILE"/>
@@ -62,4 +62,4 @@
     <logger name="com.driver.whatsapp.wrapper.controller" level="INFO"/>
     <logger name="org.springframework.web" level="DEBUG"/>
     
-</configuration> 
+</configuration>

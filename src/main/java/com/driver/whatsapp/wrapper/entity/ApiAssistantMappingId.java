@@ -1,7 +1,7 @@
 package com.driver.whatsapp.wrapper.entity;
 
 import lombok.Data;
-import lombok.NoArgsConstructor;
+import lombok.NoArgsConstructor;  
 import lombok.AllArgsConstructor;
 import lombok.EqualsAndHashCode;
 
