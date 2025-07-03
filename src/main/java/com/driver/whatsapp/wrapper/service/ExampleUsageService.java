@@ -217,10 +217,79 @@ public class ExampleUsageService {
             if (ConfigurationCacheService.hasApiAssistantMapping(apiName, mode)) {
                 String tenantId = ConfigurationCacheService.getTenantId(apiName, mode);
                 String assistantId = ConfigurationCacheService.getAssistantId(apiName, mode);
-                log.info("  {} - ✅ supported (tenant: {}, assistant: {})", mode, tenantId, assistantId);
+                String nextMode = ConfigurationCacheService.getNextCommunicationMode(apiName, mode);
+                log.info("  {} - ✅ supported (tenant: {}, assistant: {}, next: {})", 
+                        mode, tenantId, assistantId, nextMode);
             } else {
                 log.info("  {} - ❌ not supported", mode);
             }
+        }
+    }
+    
+    /**
+     * Example showing how to use nextCommunicationMode for fallback scenarios
+     */
+    public void handleCommunicationWithFallback(String apiName, String initialMode, String driverPhone, String message) {
+        log.info("Attempting communication for API: {} starting with mode: {}", apiName, initialMode);
+        
+        String currentMode = initialMode;
+        int maxFallbackAttempts = 3; // Prevent infinite loops
+        int attempt = 1;
+        
+        while (currentMode != null && attempt <= maxFallbackAttempts) {
+            // Check if current mode is supported
+            if (ConfigurationCacheService.hasApiAssistantMapping(apiName, currentMode)) {
+                String tenantId = ConfigurationCacheService.getTenantId(apiName, currentMode);
+                String assistantId = ConfigurationCacheService.getAssistantId(apiName, currentMode);
+                String nextMode = ConfigurationCacheService.getNextCommunicationMode(apiName, currentMode);
+                
+                log.info("Attempt {}: Trying {} (tenant: {}, assistant: {}, next fallback: {})", 
+                        attempt, currentMode, tenantId, assistantId, nextMode);
+                
+                // Simulate sending message with current mode
+                boolean success = attemptSendMessage(currentMode, driverPhone, message, tenantId, assistantId);
+                
+                if (success) {
+                    log.info("✅ Message sent successfully via {}", currentMode);
+                    return; // Success - exit
+                } else {
+                    log.warn("❌ Failed to send via {}, trying fallback: {}", currentMode, nextMode);
+                    currentMode = nextMode; // Move to next communication mode
+                    attempt++;
+                }
+            } else {
+                log.error("No mapping found for API: {} with mode: {}", apiName, currentMode);
+                break;
+            }
+        }
+        
+        // If we reach here, all attempts failed
+        log.error("🚨 CRITICAL: All communication attempts failed for API: {} starting from mode: {}", 
+                apiName, initialMode);
+        // TODO: Trigger alert to operations team, store for manual follow-up, etc.
+    }
+    
+    /**
+     * Example showing intelligent communication mode selection based on driver preferences
+     */
+    public void sendDriverNotificationWithPreference(String driverPhone, String message, String preferredMode) {
+        log.info("Sending notification to driver {} with preferred mode: {}", driverPhone, preferredMode);
+        
+        // Try preferred mode first for driver_details API
+        boolean success = false;
+        if (ConfigurationCacheService.hasApiAssistantMapping("driver_details", preferredMode)) {
+            String tenantId = ConfigurationCacheService.getTenantId("driver_details", preferredMode);
+            String assistantId = ConfigurationCacheService.getAssistantId("driver_details", preferredMode);
+            
+            log.info("Attempting preferred mode: {} (tenant: {}, assistant: {})", 
+                    preferredMode, tenantId, assistantId);
+            success = attemptSendMessage(preferredMode, driverPhone, message, tenantId, assistantId);
+        }
+        
+        // If preferred mode failed, use the fallback chain
+        if (!success) {
+            log.warn("Preferred mode {} failed, initiating fallback chain", preferredMode);
+            handleCommunicationWithFallback("driver_details", preferredMode, driverPhone, message);
         }
     }
     
@@ -260,5 +329,41 @@ public class ExampleUsageService {
     private void processWithConfiguration(int timeout, int retries) {
         // Your processing logic with configuration
         log.info("Processing with configured timeout: {}ms and retries: {}", timeout, retries);
+    }
+    
+    /**
+     * Helper method to simulate sending a message via different communication modes
+     * In a real implementation, this would call the appropriate service (WhatsApp, SMS, etc.)
+     */
+    private boolean attemptSendMessage(String mode, String phone, String message, String tenantId, String assistantId) {
+        try {
+            log.info("Attempting to send message via {} to {} using tenant: {}, assistant: {}", 
+                    mode, phone, tenantId, assistantId);
+            
+            // Simulate different success rates for different modes (for demonstration)
+            switch (mode.toLowerCase()) {
+                case "whatsapp":
+                    // WhatsApp has 80% success rate in this simulation
+                    return Math.random() > 0.2;
+                case "sms":
+                    // SMS has 90% success rate
+                    return Math.random() > 0.1;
+                case "email":
+                    // Email has 95% success rate
+                    return Math.random() > 0.05;
+                case "chat":
+                    // Chat has 70% success rate
+                    return Math.random() > 0.3;
+                case "voice":
+                    // Voice has 60% success rate
+                    return Math.random() > 0.4;
+                default:
+                    log.warn("Unknown communication mode: {}", mode);
+                    return false;
+            }
+        } catch (Exception e) {
+            log.error("Error sending message via {}: {}", mode, e.getMessage());
+            return false;
+        }
     }
 } 

@@ -108,8 +108,8 @@ public class ConfigurationCacheService {
                 for (ApiAssistantMapping mapping : mappings) {
                     String combinedKey = mapping.getCombinedKey();
                     apiAssistantMappingCache.put(combinedKey, mapping);
-                    log.debug("Loaded API assistant mapping: {} -> tenant: {}, assistant: {}", 
-                             combinedKey, mapping.getTenantId(), mapping.getAssistantId());
+                    log.debug("Loaded API assistant mapping: {} -> tenant: {}, assistant: {}, nextCommunicationMode: {}", 
+                             combinedKey, mapping.getTenantId(), mapping.getAssistantId(), mapping.getNextCommunicationMode());
                 }
 
                 log.info("Successfully loaded {} API assistant mappings", apiAssistantMappingCache.size());
@@ -186,6 +186,14 @@ public class ConfigurationCacheService {
     public static String getAssistantId(String apiName, String communicationMode) {
         ApiAssistantMapping mapping = getApiAssistantMapping(apiName, communicationMode);
         return mapping != null ? mapping.getAssistantId() : null;
+    }
+    
+    /**
+     * Get next communication mode for API name and communication mode - STATIC ACCESS
+     */
+    public static String getNextCommunicationMode(String apiName, String communicationMode) {
+        ApiAssistantMapping mapping = getApiAssistantMapping(apiName, communicationMode);
+        return mapping != null ? mapping.getNextCommunicationMode() : null;
     }
     
     /**

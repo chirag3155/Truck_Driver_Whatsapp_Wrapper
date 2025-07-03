@@ -160,6 +160,7 @@ public class ConfigurationController {
         
         String tenantId = ConfigurationCacheService.getTenantId(apiName, communicationMode);
         String assistantId = ConfigurationCacheService.getAssistantId(apiName, communicationMode);
+        String nextCommunicationMode = ConfigurationCacheService.getNextCommunicationMode(apiName, communicationMode);
         
         Map<String, Object> response = new HashMap<>();
         if (tenantId != null && assistantId != null) {
@@ -168,6 +169,7 @@ public class ConfigurationController {
             response.put("communicationMode", communicationMode);
             response.put("tenantId", tenantId);
             response.put("assistantId", assistantId);
+            response.put("nextCommunicationMode", nextCommunicationMode);
             response.put("combinedKey", apiName + "_" + communicationMode);
             return ResponseEntity.ok(response);
         } else {
@@ -193,5 +195,34 @@ public class ConfigurationController {
         response.put("timestamp", java.time.LocalDateTime.now().toString());
         
         return ResponseEntity.ok(response);
+    }
+
+    /**
+     * Get next communication mode for specific API name and current communication mode
+     */
+    @Operation(
+        summary = "Get Next Communication Mode",
+        description = "Retrieves the next communication mode for a specific API and current communication mode"
+    )
+    @GetMapping("/next-communication-mode/{apiName}/{communicationMode}")
+    public ResponseEntity<Map<String, Object>> getNextCommunicationMode(
+            @PathVariable String apiName, 
+            @PathVariable String communicationMode) {
+        
+        String nextCommunicationMode = ConfigurationCacheService.getNextCommunicationMode(apiName, communicationMode);
+        
+        Map<String, Object> response = new HashMap<>();
+        if (nextCommunicationMode != null) {
+            response.put("status", "success");
+            response.put("apiName", apiName);
+            response.put("currentCommunicationMode", communicationMode);
+            response.put("nextCommunicationMode", nextCommunicationMode);
+            response.put("combinedKey", apiName + "_" + communicationMode);
+            return ResponseEntity.ok(response);
+        } else {
+            response.put("status", "not_found");
+            response.put("message", "Next communication mode not found for: " + apiName + "_" + communicationMode);
+            return ResponseEntity.notFound().build();
+        }
     }
 } 

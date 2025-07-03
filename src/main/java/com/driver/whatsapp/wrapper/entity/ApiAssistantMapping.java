@@ -22,39 +22,30 @@ public class ApiAssistantMapping {
     @Column(name = "assistant_id", nullable = false, length = 100)
     private String assistantId;
     
-    // Convenience constructor
-    public ApiAssistantMapping(String apiName, String communicationMode, String tenantId, String assistantId) {
-        this.id = new ApiAssistantMappingId(apiName, communicationMode);
-        this.tenantId = tenantId;
-        this.assistantId = assistantId;
+    @Column(name = "next_communication_mode", nullable = false, length = 50)
+    private String nextCommunicationMode;
+    
+    /**
+     * Get combined key for cache mapping (apiName_communicationMode)
+     */
+    public String getCombinedKey() {
+        if (id != null) {
+            return id.getApiName() + "_" + id.getCommunicationMode();
+        }
+        return null;
     }
     
-    // Convenience getters for composite key fields
+    /**
+     * Convenience method to get API name
+     */
     public String getApiName() {
         return id != null ? id.getApiName() : null;
     }
     
+    /**
+     * Convenience method to get communication mode
+     */
     public String getCommunicationMode() {
         return id != null ? id.getCommunicationMode() : null;
-    }
-    
-    // Convenience setters for composite key fields
-    public void setApiName(String apiName) {
-        if (this.id == null) {
-            this.id = new ApiAssistantMappingId();
-        }
-        this.id.setApiName(apiName);
-    }
-    
-    public void setCommunicationMode(String communicationMode) {
-        if (this.id == null) {
-            this.id = new ApiAssistantMappingId();
-        }
-        this.id.setCommunicationMode(communicationMode);
-    }
-    
-    // Utility method to get the combined key for HashMap
-    public String getCombinedKey() {
-        return getApiName() + "_" + getCommunicationMode();
     }
 } 
