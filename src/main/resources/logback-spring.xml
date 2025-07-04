@@ -2,7 +2,7 @@
 <configuration>
     
     <!-- Define log directory -->
-    <property name="LOG_DIR" value="/logs"/>
+    <property name="LOG_DIR" value="./logs"/>
     
     <!-- Console Appender -->
     <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">

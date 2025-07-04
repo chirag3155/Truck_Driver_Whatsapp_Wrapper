@@ -107,4 +107,9 @@ public class TransactionDetail {
     public String getTransactionId() {
         return id != null ? id.getTransactionId() : null;
     }
+
+    public enum FlowType {
+        WHATSAPP,
+        CALL
+    }
 } 

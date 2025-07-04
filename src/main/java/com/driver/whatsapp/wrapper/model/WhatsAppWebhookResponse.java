@@ -88,4 +88,8 @@ public class WhatsAppWebhookResponse {
         @JsonProperty("name")
         private String name;
     }
+
+    public List<Result> getResults() {
+        return results;
+    }
 } 

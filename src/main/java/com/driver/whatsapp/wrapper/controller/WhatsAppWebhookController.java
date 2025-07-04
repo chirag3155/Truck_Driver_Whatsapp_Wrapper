@@ -20,9 +20,9 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 
+@Slf4j
 @RestController
 @RequestMapping("/wawrapper/whatsapp")
-@Slf4j
 @Tag(name = "WhatsApp Webhooks", description = "Webhook endpoints for receiving messages from Infobip WhatsApp API")
 public class WhatsAppWebhookController {
 
@@ -119,83 +119,4 @@ public class WhatsAppWebhookController {
             return ResponseEntity.status(500).body(errorResponse);
         }
     }
-
-    /**
-     * Webhook endpoint for delivery reports
-     * Called by Infobip to report message delivery status
-     */
-    @PostMapping("/delivery-report")
-    public ResponseEntity<Map<String, String>> receiveDeliveryReport(@RequestBody String deliveryData) {
-        try {
-            log.info("Received delivery report: {}", deliveryData);
-            
-            // Process delivery report if needed
-            // For now, just log it
-            
-            Map<String, String> response = new HashMap<>();
-            response.put("status", "success");
-            response.put("message", "Delivery report received");
-            
-            return ResponseEntity.ok(response);
-
-        } catch (Exception e) {
-            log.error("Error processing delivery report: {}", e.getMessage(), e);
-            
-            Map<String, String> errorResponse = new HashMap<>();
-            errorResponse.put("status", "error");
-            errorResponse.put("message", "Failed to process delivery report: " + e.getMessage());
-            
-            return ResponseEntity.status(500).body(errorResponse);
-        }
-    }
-
-    /**
-     * Test endpoint to verify webhook configuration
-     */
-    @Operation(
-        summary = "Test Webhook",
-        description = "Test endpoint to verify that the WhatsApp webhook is working correctly"
-    )
-    @ApiResponses(value = {
-        @ApiResponse(
-            responseCode = "200",
-            description = "Webhook is working correctly",
-            content = @Content(
-                mediaType = "application/json",
-                examples = @ExampleObject(
-                    value = """
-                    {
-                      "status": "active",
-                      "message": "WhatsApp webhook is working",
-                      "timestamp": "2025-06-25T10:30:00"
-                    }
-                    """
-                )
-            )
-        )
-    })
-    @GetMapping("/test")
-    public ResponseEntity<Map<String, String>> testWebhook() {
-        Map<String, String> response = new HashMap<>();
-        response.put("status", "active");
-        response.put("message", "WhatsApp webhook is working");
-        response.put("timestamp", java.time.LocalDateTime.now().toString());
-        
-        return ResponseEntity.ok(response);
-    }
-
-    /**
-     * Endpoint to receive webhook verification (if required by Infobip)
-     */
-    @GetMapping("/callback")
-    public ResponseEntity<String> verifyWebhook(@RequestParam(required = false) String challenge) {
-        if (challenge != null) {
-            log.info("Webhook verification challenge received: {}", challenge);
-            return ResponseEntity.ok(challenge);
-        }
-        
-        return ResponseEntity.ok("WhatsApp webhook endpoint is active");
-    }
-
-
 } 
