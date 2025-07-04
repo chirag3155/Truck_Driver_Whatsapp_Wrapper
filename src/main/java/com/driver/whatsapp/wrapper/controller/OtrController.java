@@ -47,20 +47,12 @@ public class OtrController {
                     {
                       "status": "success",
                       "message": "OTR request processed successfully",
-                      "data": {
-                        "conversationId": "CON1234567890ABC",
-                        "transactionId": "A1B2C3D4E5F67890",
-                        "orderNumber": "ORD987654321",
-                        "truckNumber": "TRK001",
-                        "phoneNumber": "971526328601",
-                        "tripId": "TRIP123",
-                        "uniqueId": "UNIQUE456",
-                        "chatResponse": "Hello! Your delivery details have been updated...",
-                        "messageSent": true,
-                        "statusCode": "MESSAGE_SENT",
-                        "communicationMode": "whatsapp",
-                        "flowName": "OTR",
-                        "timestamp": "2025-01-20T10:30:00"
+                      "infobipResponse": {
+                        "success": true,
+                        "statusCode": 200,
+                        "statusMessage": "200 OK",
+                        "responseBody": "{\\"messages\\":[{\\"messageId\\":\\"TMPL_123\\",\\"status\\":{\\"groupId\\":1,\\"groupName\\":\\"PENDING\\",\\"id\\":26,\\"name\\":\\"MESSAGE_ACCEPTED\\",\\"description\\":\\"Message sent to next instance\\"}}]}",
+                        "message": "Template message sent successfully to InfoBip"
                       }
                     }
                     """
@@ -77,7 +69,7 @@ public class OtrController {
                     {
                       "status": "error",
                       "message": "Invalid flow type: INVALID_FLOW",
-                      "data": null
+                      "infobipResponse": null
                     }
                     """
                 )
@@ -92,8 +84,15 @@ public class OtrController {
                     value = """
                     {
                       "status": "error",
-                      "message": "Failed to process OTR request: Database connection error",
-                      "data": null
+                      "message": "Failed to send OTR message: InfoBip Client Error: 400 Bad Request",
+                      "infobipResponse": {
+                        "success": false,
+                        "statusCode": 400,
+                        "statusMessage": "400 BAD_REQUEST",
+                        "responseBody": "{\\"requestError\\":{\\"serviceException\\":{\\"messageId\\":\\"BAD_REQUEST\\",\\"text\\":\\"Bad request\\",\\"validationErrors\\":{\\"messages[0].content.templateName\\":[\\"must be composed only of lowercase letters, numbers and underscores\\"]}}}}",
+                        "message": "InfoBip Client Error: 400 Bad Request",
+                        "errorType": "CLIENT_ERROR"
+                      }
                     }
                     """
                 )
@@ -117,7 +116,7 @@ public class OtrController {
                 errorResponse.put("message", "Invalid flow type: " + flowName + ". Valid types: " + 
                     String.join(", ", FlowType.LOADING_CONFIRMATION.getValue(), FlowType.ORDER_COMPLETION.getValue(), 
                                FlowType.OTR.getValue(), FlowType.REMINDER.getValue(), FlowType.STATUS_FOLLOW_UP.getValue()));
-                errorResponse.put("data", null);
+                errorResponse.put("infobipResponse", null);
                 return ResponseEntity.badRequest().body(errorResponse);
             }
 
@@ -139,7 +138,7 @@ public class OtrController {
             Map<String, Object> errorResponse = new HashMap<>();
             errorResponse.put("status", "error");
             errorResponse.put("message", "Failed to process " + flowName + " request: " + e.getMessage());
-            errorResponse.put("data", null);
+            errorResponse.put("infobipResponse", null);
             
             return ResponseEntity.status(500).body(errorResponse);
         }
