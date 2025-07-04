@@ -94,26 +94,32 @@ public class OtrService {
             
             // Create template message from database (this is what will be sent to driver)
             List<WhatsAppMessage.Message> templateMessages = createTemplateMessageFromDatabase(request, flowType, communicationMode);
-            
+            log.info("Template messages: {}", templateMessages);
             // Log and extract template message content for response
             String templateMessageContent = extractAndLogTemplateContent(templateMessages, flowType);
-            
+            log.info("Template message content: {}", templateMessageContent);
             // Send the database template message to driver (not chat module response)
-            boolean messageSent = sendTemplateMessage(templateMessages);
+            Map<String, Object> sendResult = sendTemplateMessage(templateMessages);
+            boolean messageSent = (Boolean) sendResult.get("success");
             
             // Update status code based on success/failure
             String statusCode = messageSent ? "MESSAGE_SENT" : "MESSAGE_FAILED";
             transactionDetail.setStatusCode(statusCode);
             transactionDetailRepository.save(transactionDetail);
             
-            // Prepare response with both chat response (for logging) and template message (what was sent)
+            // Prepare clean response based on InfoBip success/failure
             Map<String, Object> response = new HashMap<>();
-            response.put("status", "success");
-            response.put("message", flowName + " request processed successfully");
-            response.put("data", createResponseData(request, chatResponse, messageSent, statusCode, transactionId, conversationId, flowName, communicationMode, templateMessageContent));
-            response.put("templateMessages", templateMessages); // Template message sent to driver
-            response.put("actualMessageSentToDriver", templateMessageContent); // The actual rendered message driver will see
-            response.put("chatModuleResponse", chatResponse); // Chat module response for logging
+            
+            if (messageSent) {
+                response.put("status", "success");
+                response.put("message", flowName + " request processed successfully");
+            } else {
+                response.put("status", "error");
+                response.put("message", "Failed to send " + flowName + " message: " + sendResult.get("message"));
+            }
+            
+            // Only include InfoBip response details
+            response.put("infobipResponse", sendResult.get("infobipResponse"));
             
             return response;
             
@@ -122,7 +128,7 @@ public class OtrService {
             Map<String, Object> errorResponse = new HashMap<>();
             errorResponse.put("status", "error");
             errorResponse.put("message", "Failed to process " + flowName + " request: " + e.getMessage());
-            errorResponse.put("data", null);
+            errorResponse.put("infobipResponse", null);
             return errorResponse;
         }
     }
@@ -443,7 +449,7 @@ public class OtrService {
             }
             
             // Fill placeholders with actual data
-            List<String> placeholderValues = fillPlaceholders(templateConfig.getPlaceholders(), request);
+            List<String> placeholderValues = fillPlaceholders(templateConfig.getPlaceholders(), request,flowType);
             
             // Convert buttons from config to WhatsApp buttons
             List<WhatsAppMessage.Button> buttons = convertButtons(templateConfig.getButtons());
@@ -497,14 +503,14 @@ public class OtrService {
     /**
      * Fill placeholders with actual data from request
      */
-    private List<String> fillPlaceholders(List<TemplateMessage.PlaceholderConfig> placeholderConfigs, OtrRequest request) {
+    private List<String> fillPlaceholders(List<TemplateMessage.PlaceholderConfig> placeholderConfigs, OtrRequest request,FlowType flowType) {
         List<String> values = new ArrayList<>();
         
         for (TemplateMessage.PlaceholderConfig config : placeholderConfigs) {
-            String value = getValueForPlaceholder(config.getKey(), request);
+            String value = getValueForPlaceholderByFlow(config.getKey(), request,flowType);
             if (value == null || value.trim().isEmpty()) {
                 value = config.getDefaultValue();
-            }
+            }                      
             values.add(value);
         }
         
@@ -514,24 +520,127 @@ public class OtrService {
     /**
      * Get value for placeholder key from request data
      */
-    private String getValueForPlaceholder(String key, OtrRequest request) {
+    private String getValueForPlaceholderByFlow(String key, OtrRequest request, FlowType flowType) {
+        switch (flowType) {
+            case OTR:
+                return getOtrPlaceholderValue(key, request);
+            case LOADING_CONFIRMATION:
+                return getLoadingConfirmationPlaceholderValue(key, request);
+            case ORDER_COMPLETION:
+                return getOrderCompletionPlaceholderValue(key, request);
+            case REMINDER:
+                return getReminderPlaceholderValue(key, request);
+            case STATUS_FOLLOW_UP:
+                return getStatusFollowUpPlaceholderValue(key, request);
+            default:
+                return getGenericPlaceholderValue(key, request);
+        }
+    }
+
+    private String getOtrPlaceholderValue(String key, OtrRequest request) {
         switch (key.toLowerCase()) {
             case "drivername":
-                return request.getDriverName();
-            case "pickuplocation":
-                return request.getPickUpLocation();
-            case "dropofflocation":
-                return request.getDropOffLocation();
-            case "eta":
-                return request.getEta() != null ? formatDateTimeHumanReadable(request.getEta().toString()) : "scheduled time";
-            case "commodity":
-                return request.getCommodity();
-            case "ordernumber":
-                return request.getOrderNumber();
+                return request.getDriverName() != null ? request.getDriverName() : "Driver";
             case "trucknumber":
-                return request.getTruckNumber();
-            case "statustype":
-                return "Status Update";
+                return request.getTruckNumber() != null ? request.getTruckNumber() : "TRK001";
+            case "pickuplocation":
+                return request.getPickUpLocation() != null ? request.getPickUpLocation() : "Pickup Location";
+            case "dropofflocation":
+                return request.getDropOffLocation() != null ? request.getDropOffLocation() : "Drop Location";
+            case "clientname":
+                return request.getClientName() != null ? request.getClientName() : "Client";
+            case "movedate":
+                return request.getOrderDate() != null ? formatDateTimeHumanReadable(request.getOrderDate().toString()) : "Today";
+            case "eta":
+                return request.getEta() != null ? formatDateTimeHumanReadable(request.getEta().toString()) : "10:00 AM";
+            default:
+                return null;
+        }
+    }
+
+    private String getLoadingConfirmationPlaceholderValue(String key, OtrRequest request) {
+        switch (key.toLowerCase()) {
+            case "drivername":
+                return request.getDriverName() != null ? request.getDriverName() : "Driver";
+            case "trucknumber":
+                return request.getTruckNumber() != null ? request.getTruckNumber() : "TRK001";
+            case "pickuplocation":
+                return request.getPickUpLocation() != null ? request.getPickUpLocation() : "Pickup Location";
+            case "dropofflocation":
+                return request.getDropOffLocation() != null ? request.getDropOffLocation() : "Drop Location";
+            case "clientname":
+                return request.getClientName() != null ? request.getClientName() : "Client";
+            default:
+                return null;
+        }
+    }
+
+    private String getOrderCompletionPlaceholderValue(String key, OtrRequest request) {
+        switch (key.toLowerCase()) {
+            case "vendorname":
+                return request.getDriverName() != null ? request.getDriverName() : "Driver";
+            case "numberoftrips":
+                return request.getNumberOfTrips() != null ? request.getNumberOfTrips().toString() : "5";
+            default:
+                return null;
+        }
+    }
+
+    private String getReminderPlaceholderValue(String key, OtrRequest request) {
+        switch (key.toLowerCase()) {
+            case "drivername":
+                return request.getDriverName() != null ? request.getDriverName() : "Driver";
+            case "trucknumber":
+                return request.getTruckNumber() != null ? request.getTruckNumber() : "TRK001";
+            case "pickuplocation":
+                return request.getPickUpLocation() != null ? request.getPickUpLocation() : "Pickup Location";
+            case "dropofflocation":
+                return request.getDropOffLocation() != null ? request.getDropOffLocation() : "Drop Location";
+            case "commodity":
+                return request.getCommodity() != null ? request.getCommodity() : "Cargo";
+            case "orderid":
+                return request.getOrderNumber() != null ? request.getOrderNumber() : "ORDER123";
+            default:
+                return null;
+        }
+    }
+
+    private String getStatusFollowUpPlaceholderValue(String key, OtrRequest request) {
+        switch (key.toLowerCase()) {
+            case "drivername":
+                return request.getDriverName() != null ? request.getDriverName() : "Driver";
+            case "trucknumber":
+                return request.getTruckNumber() != null ? request.getTruckNumber() : "TRK001";
+            case "pickuplocation":
+                return request.getPickUpLocation() != null ? request.getPickUpLocation() : "Pickup Location";
+            case "dropofflocation":
+                return request.getDropOffLocation() != null ? request.getDropOffLocation() : "Drop Location";
+            case "clientname":
+                return request.getClientName() != null ? request.getClientName() : "Client";
+            default:
+                return null;
+        }
+    }
+
+    private String getGenericPlaceholderValue(String key, OtrRequest request) {
+        switch (key.toLowerCase()) {
+            case "drivername":
+                return request.getDriverName() != null ? request.getDriverName() : "Driver";
+            case "trucknumber":
+                return request.getTruckNumber() != null ? request.getTruckNumber() : "TRK001";
+            case "pickuplocation":
+                return request.getPickUpLocation() != null ? request.getPickUpLocation() : "Pickup Location";
+            case "dropofflocation":
+                return request.getDropOffLocation() != null ? request.getDropOffLocation() : "Drop Location";
+            case "clientname":
+                return request.getClientName() != null ? request.getClientName() : "Client";
+            case "eta":
+                return request.getEta() != null ? formatDateTimeHumanReadable(request.getEta().toString()) : "10:00 AM";
+            case "commodity":
+                return request.getCommodity() != null ? request.getCommodity() : "Cargo";
+            case "ordernumber":
+            case "orderid":
+                return request.getOrderNumber() != null ? request.getOrderNumber() : "ORDER123";
             default:
                 return null;
         }
@@ -594,17 +703,17 @@ public class OtrService {
     private String getTemplateNameForFlow(FlowType flowType) {
         switch (flowType) {
             case OTR:
-                return "11_start_time_due";
+                return "al_otr_en";
             case LOADING_CONFIRMATION:
-                return "11_start_time_due";
+                return "ai_loading_confirmation";
             case ORDER_COMPLETION:
-                return "11_start_time_due";
+                return "ai_pod_reminder";
             case REMINDER:
-                return "11_start_time_due";
+                return "ai_reminder_en";
             case STATUS_FOLLOW_UP:
-                return "11_start_time_due";
+                return "ai_generic_connect_status_update_cross_border";
             default:
-                return "11_start_time_due";
+                return "ai_generic_connect_status_update_cross_border";
         }
     }
     
@@ -616,8 +725,11 @@ public class OtrService {
             case OTR:
                 return Arrays.asList(
                     request.getDriverName() != null ? request.getDriverName() : "Driver",
+                    request.getTruckNumber(),     
                     request.getPickUpLocation(),
                     request.getDropOffLocation(),
+                    request.getClientName(),   
+                    request.getOrderDate() != null ? formatDateTimeHumanReadable(request.getOrderDate().toString()) : "scheduled time",
                     request.getEta() != null ? formatDateTimeHumanReadable(request.getEta().toString()) : "scheduled time"
                 );
             case LOADING_CONFIRMATION:
@@ -664,15 +776,23 @@ public class OtrService {
     private List<WhatsAppMessage.Button> getButtonsForFlow(FlowType flowType) {
         switch (flowType) {
             case OTR:
-                return Arrays.asList(
-                    WhatsAppMessage.Button.builder()
-                        .type("QUICK_REPLY")
-                        .parameter("Yes I am on time")
-                        .build(),
-                    WhatsAppMessage.Button.builder()
-                        .type("QUICK_REPLY")
-                        .parameter("I am late")
-                        .build()
+            return Arrays.asList(
+                WhatsAppMessage.Button.builder()
+                    .type("QUICK_REPLY")
+                    .parameter("Yes, On Time")
+                    .build(),
+                WhatsAppMessage.Button.builder()
+                    .type("QUICK_REPLY")
+                    .parameter("No, There is a Delay")
+                    .build(),
+                WhatsAppMessage.Button.builder()
+                    .type("QUICK_REPLY")
+                    .parameter("Not loading this trip")
+                    .build(),
+                WhatsAppMessage.Button.builder()
+                    .type("URL")
+                    .parameter("https://trukker.com/partner") // Update with actual URL
+                    .build()
                 );
             case LOADING_CONFIRMATION:
                 return Arrays.asList(
@@ -753,7 +873,7 @@ public class OtrService {
             
             try {
                 apiAssistantMapping = apiAssistantMappingRepository
-                    .findById(new ApiAssistantMappingId(flowType.getValue(), communicationMode))
+                    .findById(new ApiAssistantMappingId(flowType.getValue(), communicationMode)) 
                     .orElse(null);
                 
                 if (apiAssistantMapping != null) {
@@ -779,13 +899,13 @@ public class OtrService {
             log.info("- Driver: {}", request.getPhoneNumber());
             
             // Fill placeholders with actual data from request
-            List<String> placeholderValues = fillPlaceholders(templateConfig.getPlaceholders(), request);
+            List<String> placeholderValues = fillPlaceholders(templateConfig.getPlaceholders(), request,flowType);
             log.info("- Placeholder Values: {}", placeholderValues);
             
             // Convert buttons from config to WhatsApp buttons
             List<WhatsAppMessage.Button> buttons = convertButtons(templateConfig.getButtons());
+            log.info("Buttons: {}", buttons);
             log.info("- Number of Buttons: {}", buttons.size());
-            
             // Build template message
             WhatsAppMessage.Body body = WhatsAppMessage.Body.builder()
                     .placeholders(placeholderValues)
@@ -874,12 +994,18 @@ public class OtrService {
     
     /**
      * Send message to driver via WhatsApp service
+     * Returns InfoBip response details
      */
-    private boolean sendTemplateMessage(List<WhatsAppMessage.Message> templateMessages) {
+    private Map<String, Object> sendTemplateMessage(List<WhatsAppMessage.Message> templateMessages) {
+        Map<String, Object> sendResult = new HashMap<>();
+        
         try {
             if (templateMessages == null || templateMessages.isEmpty()) {
                 log.error("No messages to send");
-                return false;
+                sendResult.put("success", false);
+                sendResult.put("message", "No messages to send");
+                sendResult.put("infobipResponse", null);
+                return sendResult;
             }
             
             for (WhatsAppMessage.Message message : templateMessages) {
@@ -898,26 +1024,49 @@ public class OtrService {
                     .messages(Arrays.asList(message))
                     .build();
                 
-                // Send the message using WhatsApp service
-                sendWhatsAppTemplateMessage(whatsAppMessage);
+                // Send the message using WhatsApp service and get InfoBip response
+                Map<String, Object> infobipResponse = sendWhatsAppTemplateMessage(whatsAppMessage);
                 
-                log.info("{} message sent successfully to: {}", 
-                    messageType.substring(0, 1).toUpperCase() + messageType.substring(1), 
-                    message.getTo());
+                // Check if InfoBip call was successful
+                boolean infobipSuccess = (Boolean) infobipResponse.get("success");
+                
+                if (infobipSuccess) {
+                    log.info("{} message sent successfully to: {}", 
+                        messageType.substring(0, 1).toUpperCase() + messageType.substring(1), 
+                        message.getTo());
+                    
+                    sendResult.put("success", true);
+                    sendResult.put("message", "Message sent successfully via InfoBip");
+                    sendResult.put("infobipResponse", infobipResponse);
+                } else {
+                    log.error("Failed to send {} message to: {} - InfoBip Error: {}", 
+                        messageType, message.getTo(), infobipResponse.get("message"));
+                    
+                    sendResult.put("success", false);
+                    sendResult.put("message", "Failed to send message via InfoBip: " + infobipResponse.get("message"));
+                    sendResult.put("infobipResponse", infobipResponse);
+                }
+                
+                return sendResult; // Return after first message (assuming single message per request)
             }
-            
-            return true;
             
         } catch (Exception e) {
             log.error("Error sending message: {}", e.getMessage(), e);
-            return false;
+            sendResult.put("success", false);
+            sendResult.put("message", "Unexpected error: " + e.getMessage());
+            sendResult.put("infobipResponse", null);
         }
+        
+        return sendResult;
     }
     
     /**
      * Send WhatsApp template message using InfoBip template API only
+     * Returns response details instead of throwing exceptions
      */
-    private void sendWhatsAppTemplateMessage(WhatsAppMessage whatsAppMessage) {
+    private Map<String, Object> sendWhatsAppTemplateMessage(WhatsAppMessage whatsAppMessage) {
+        Map<String, Object> infobipResponse = new HashMap<>();
+        
         try {
             // Always use template API endpoint
             String endpoint = "/whatsapp/1/message/template";
@@ -958,36 +1107,72 @@ public class OtrService {
             log.info("Response Headers: {}", response.getHeaders());
             log.info("Response Body: {}", response.getBody());
             
+            // Build response object
+            infobipResponse.put("success", response.getStatusCode().is2xxSuccessful());
+            infobipResponse.put("statusCode", response.getStatusCode().value());
+            infobipResponse.put("statusMessage", response.getStatusCode().toString());
+            infobipResponse.put("responseBody", response.getBody());
+            
             if (response.getStatusCode().is2xxSuccessful()) {
                 log.info("✅ Template message sent successfully to InfoBip");
-                log.info("✅ InfoBip Response: {}", response.getBody());
+                infobipResponse.put("message", "Template message sent successfully to InfoBip");
             } else {
                 log.error("❌ InfoBip API Error - Status: {}, Body: {}", 
                     response.getStatusCode(), response.getBody());
-                log.error("❌ This means InfoBip rejected the template message!");
+                infobipResponse.put("message", "InfoBip API returned error: " + response.getStatusCode());
             }
+            
+            return infobipResponse;
             
         } catch (org.springframework.web.client.HttpClientErrorException e) {
             log.error("❌ InfoBip Client Error (4xx): Status={}, Body={}", 
                 e.getStatusCode(), e.getResponseBodyAsString());
-            log.error("❌ This usually means: Invalid API key, wrong template name, or template not approved");
-            throw new RuntimeException("InfoBip Client Error: " + e.getMessage(), e);
+            
+            infobipResponse.put("success", false);
+            infobipResponse.put("statusCode", e.getStatusCode().value());
+            infobipResponse.put("statusMessage", e.getStatusCode().toString());
+            infobipResponse.put("responseBody", e.getResponseBodyAsString());
+            infobipResponse.put("message", "InfoBip Client Error: " + e.getMessage());
+            infobipResponse.put("errorType", "CLIENT_ERROR");
+            
+            return infobipResponse;
             
         } catch (org.springframework.web.client.HttpServerErrorException e) {
             log.error("❌ InfoBip Server Error (5xx): Status={}, Body={}", 
                 e.getStatusCode(), e.getResponseBodyAsString());
-            log.error("❌ This means InfoBip service is down or having issues");
-            throw new RuntimeException("InfoBip Server Error: " + e.getMessage(), e);
+            
+            infobipResponse.put("success", false);
+            infobipResponse.put("statusCode", e.getStatusCode().value());
+            infobipResponse.put("statusMessage", e.getStatusCode().toString());
+            infobipResponse.put("responseBody", e.getResponseBodyAsString());
+            infobipResponse.put("message", "InfoBip Server Error: " + e.getMessage());
+            infobipResponse.put("errorType", "SERVER_ERROR");
+            
+            return infobipResponse;
             
         } catch (org.springframework.web.client.ResourceAccessException e) {
             log.error("❌ Network/Connection Error: {}", e.getMessage());
-            log.error("❌ Cannot reach InfoBip API - check network/URL");
-            throw new RuntimeException("Network Error: " + e.getMessage(), e);
+            
+            infobipResponse.put("success", false);
+            infobipResponse.put("statusCode", 0);
+            infobipResponse.put("statusMessage", "Network/Connection Error");
+            infobipResponse.put("responseBody", null);
+            infobipResponse.put("message", "Cannot reach InfoBip API: " + e.getMessage());
+            infobipResponse.put("errorType", "NETWORK_ERROR");
+            
+            return infobipResponse;
             
         } catch (Exception e) {
             log.error("❌ Unexpected Error sending template message: {}", e.getMessage(), e);
-            log.error("❌ Full error details: ", e);
-            throw new RuntimeException("Failed to send template message", e);
+            
+            infobipResponse.put("success", false);
+            infobipResponse.put("statusCode", 0);
+            infobipResponse.put("statusMessage", "Internal Error");
+            infobipResponse.put("responseBody", null);
+            infobipResponse.put("message", "Unexpected error: " + e.getMessage());
+            infobipResponse.put("errorType", "INTERNAL_ERROR");
+            
+            return infobipResponse;
         }
     }
 
@@ -1138,7 +1323,7 @@ public class OtrService {
     private String getMessageTemplateFormatByFlow(FlowType flowType) {
         switch (flowType) {
             case OTR:
-                return "Hello {0}! Just checking in - did you reach {1} on time for your trip to {2}? Your ETA was {3}. Please let me know your status.";
+            return "Hi {0} (Truck: {1}), For your upcoming trip from {2} → {3} for {4} is scheduled on {5}. 👉 Please confirm if you will reach the loading point on time by {6}? Please reply:";
             case LOADING_CONFIRMATION:
                 return "Hi {0}! Please confirm the loading status at {1}. Commodity: {2}, Order: {3}. Are you ready to start loading?";
             case ORDER_COMPLETION:

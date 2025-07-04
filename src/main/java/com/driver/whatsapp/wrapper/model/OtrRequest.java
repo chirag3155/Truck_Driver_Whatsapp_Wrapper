@@ -17,49 +17,45 @@ import java.time.LocalDateTime;
 @Builder
 public class OtrRequest {
     
-    @NotBlank(message = "Order number is required")
     @JsonProperty("orderNumber")
     private String orderNumber;
 
-    @NotBlank(message = "Driver name is required")
     @JsonProperty("driverName")
     private String driverName;
     
-    @NotBlank(message = "Phone number is required")
     @Pattern(regexp = "^[0-9]{10,15}$", message = "Phone number must be 10-15 digits")
     @JsonProperty("phoneNumber")
     private String phoneNumber;
     
-    @NotBlank(message = "Truck number is required")
     @JsonProperty("truckNumber")
     private String truckNumber;
     
     @JsonProperty("commodity")
     private String commodity; // Can be null
     
-    @NotBlank(message = "Drop off location is required")
     @JsonProperty("dropOffLocation")
     private String dropOffLocation;
     
-    @NotNull(message = "ETA is required")
     @JsonProperty("eta")
     private LocalDateTime eta;
     
-    @NotNull(message = "Order date is required")
     @JsonProperty("orderDate")
     private LocalDateTime orderDate;
     
-    @NotBlank(message = "Pick up location is required")
     @JsonProperty("pickUpLocation")
     private String pickUpLocation;
     
-    @NotBlank(message = "Trip ID is required")
     @JsonProperty("tripId")
     private String tripId;
+
+    @JsonProperty("numberOfTrips")
+    private String numberOfTrips;
     
-    @NotBlank(message = "Unique ID is required")
     @JsonProperty("uniqueId")
     private String uniqueId;
+
+    @JsonProperty("clientName")
+    private String clientName;
     
     // These will be generated server-side
     // @JsonProperty("conversationId")

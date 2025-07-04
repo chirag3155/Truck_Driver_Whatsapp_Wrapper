@@ -69,7 +69,7 @@ public class MessageProcessingService {
             String assistantId = apiAssistantMapping.getAssistantId();
             
             // Check and cleanup expired conversation before processing new message
-            // cleanupExpiredConversation(driverPhone);
+            cleanupExpiredConversation(driverPhone);
 
             // Update last message timestamp for this driver
             lastMessageTimestamps.put(driverPhone, System.currentTimeMillis());

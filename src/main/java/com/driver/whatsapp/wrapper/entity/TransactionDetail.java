@@ -51,6 +51,9 @@ public class TransactionDetail {
     @Column(name = "conversation_id", nullable = false)
     private String ConversationId;
 
+    @Column(name = "client_name", nullable = true)
+    private String clientName;
+
     @Column(name = "flow_name", nullable = true)
     private String flowName;
 
