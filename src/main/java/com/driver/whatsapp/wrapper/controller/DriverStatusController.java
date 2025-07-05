@@ -12,12 +12,13 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.beans.factory.annotation.Value;
 import com.driver.whatsapp.wrapper.model.FlowType;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import java.util.Optional;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeParseException;
 
 @RestController
-@RequestMapping("/driver-status")
+@RequestMapping("/wawrapper/driver-status")
 public class DriverStatusController {
 
     private static final Logger log = LoggerFactory.getLogger(DriverStatusController.class);
@@ -52,7 +53,7 @@ public class DriverStatusController {
         // Fetch TransactionDetail using conversationId
         Optional<TransactionDetail> txOpt = transactionDetailRepository.findByConversationId(request.getConversationId());
         if (txOpt.isEmpty()) {
-            return ResponseEntity.status(404).body("TransactionDetail not found for conversationId: " + request.getConversationId());
+            return ResponseEntity.status(200).body("TransactionDetail not found for conversationId: " + request.getConversationId());
         }
         TransactionDetail tx = txOpt.get();
         String flowName = tx.getFlowName();
@@ -103,16 +104,23 @@ public class DriverStatusController {
                 truKKerService.updateDriverStatusBreakdown(url, tx, request.getDelayReason());
                 break;
             default:
-                return ResponseEntity.badRequest().body("Invalid action: " + action);
+                return ResponseEntity.status(200).body("Invalid action: " + action);
         }
         return ResponseEntity.ok("Driver status updated for action: " + action);
     }
 
     @Data
     public static class DriverStatusRequest {
+
+        @JsonProperty("conversationId")
         private String conversationId;
+
+        @JsonProperty("delayReason")
         private String delayReason;
+
+        @JsonProperty("newEta")
         private String newEta; // ISO-8601 string
+        
         // getters and setters
         public String getConversationId() { return conversationId; }
         public void setConversationId(String conversationId) { this.conversationId = conversationId; }

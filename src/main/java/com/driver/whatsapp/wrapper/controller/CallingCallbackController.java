@@ -25,7 +25,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 @RestController
-@RequestMapping("/calling/callback")
+@RequestMapping("/wawrapper/calling/callback")
 @Slf4j
 public class CallingCallbackController {
 
@@ -83,7 +83,7 @@ public class CallingCallbackController {
         log.info("[CallingCallback] Received callback: {}", request);
         Map<String, Object> response = new HashMap<>();
         try {
-            Optional<TransactionDetail> optionalTx = transactionDetailRepository.findByTransactionIdAndPhoneNumber(request.getTransactionId(), request.getNumber());
+            Optional<TransactionDetail> optionalTx = transactionDetailRepository.findByTransactionId(request.getTransactionId());
             if (optionalTx.isEmpty()) {
                 response.put("status", "error");
                 response.put("message", "Transaction not found");
@@ -148,7 +148,7 @@ public class CallingCallbackController {
             log.error("[CallingCallback] Error processing callback: {}", e.getMessage(), e);
             response.put("status", "error");
             response.put("message", e.getMessage());
-            return ResponseEntity.status(500).body(response);
+            return ResponseEntity.status(200).body(response);
         }
     }
 

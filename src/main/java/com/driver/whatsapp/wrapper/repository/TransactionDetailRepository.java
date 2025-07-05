@@ -134,9 +134,9 @@ public interface TransactionDetailRepository extends JpaRepository<TransactionDe
     Optional<TransactionDetail> findByConversationId(@Param("conversationId") String conversationId);
 
     /**
-     * Find transactions whose transactionTimestamp is older than the given cutoff
+     * Find transactions whose transactionTimestamp is older than the given cutoff and state is open
      */
-    @Query("SELECT td FROM TransactionDetail td WHERE td.transactionTimestamp < :cutoff")
+    @Query("SELECT td FROM TransactionDetail td WHERE td.transactionTimestamp < :cutoff AND td.state = 'open'")
     List<TransactionDetail> findTransactionsOlderThan(@Param("cutoff") java.time.LocalDateTime cutoff);
 
     /**

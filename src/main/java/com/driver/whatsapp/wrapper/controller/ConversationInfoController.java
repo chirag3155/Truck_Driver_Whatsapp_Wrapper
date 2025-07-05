@@ -44,7 +44,7 @@ public class ConversationInfoController {
                 return ResponseEntity.ok(response);
             } else {
                 log.warn("⚠️ API Response: Conversation not found for ID: {}", conversationId);
-                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
+                return ResponseEntity.status(HttpStatus.OK).body(response);
             }
         } catch (Exception e) {
             log.error("❌ API Error: Failed to get conversation info for ID {}: {}", conversationId, e.getMessage(), e);
@@ -55,7 +55,7 @@ public class ConversationInfoController {
                 .message("Internal server error: " + e.getMessage())
                 .build();
                 
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
+            return ResponseEntity.status(HttpStatus.OK).body(errorResponse);
         }
     }
 
@@ -82,7 +82,7 @@ public class ConversationInfoController {
                 return ResponseEntity.ok(response);
             } else {
                 log.warn("⚠️ API Response: No open conversation found for phone: {}", phoneNumber);
-                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
+                return ResponseEntity.status(HttpStatus.OK).body(response);
             }
         } catch (Exception e) {
             log.error("❌ API Error: Failed to get conversation info for phone {}: {}", phoneNumber, e.getMessage(), e);
@@ -93,7 +93,7 @@ public class ConversationInfoController {
                 .message("Internal server error: " + e.getMessage())
                 .build();
                 
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
+            return ResponseEntity.status(HttpStatus.OK).body(errorResponse);
         }
     }
 

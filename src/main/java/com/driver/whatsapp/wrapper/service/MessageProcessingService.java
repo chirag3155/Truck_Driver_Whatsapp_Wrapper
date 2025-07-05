@@ -58,6 +58,11 @@ public class MessageProcessingService {
 
             Optional<TransactionDetail> transactionDetail = transactionDetailRepository.findMostRecentOpenConversation(driverPhone);
 
+            if (transactionDetail.isEmpty()) {
+                log.warn("No open conversation found for driver: {}. Skipping message processing.", driverPhone);
+                return;
+            }
+
             String conversationId = transactionDetail.get().getConversationId();
             String flowName = transactionDetail.get().getFlowName();
             String communicationMode = transactionDetail.get().getCommunicationMode();

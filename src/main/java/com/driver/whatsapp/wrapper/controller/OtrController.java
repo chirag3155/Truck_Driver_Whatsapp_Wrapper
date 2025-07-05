@@ -117,7 +117,8 @@ public class OtrController {
                     String.join(", ", FlowType.LOADING_CONFIRMATION.getValue(), FlowType.ORDER_COMPLETION.getValue(), 
                                FlowType.OTR.getValue(), FlowType.REMINDER.getValue(), FlowType.STATUS_FOLLOW_UP.getValue()));
                 errorResponse.put("infobipResponse", null);
-                return ResponseEntity.badRequest().body(errorResponse);
+                // return ResponseEntity.badRequest().body(errorResponse);
+                return ResponseEntity.status(200).body(errorResponse);
             }
 
             // Process flow request
@@ -129,7 +130,7 @@ public class OtrController {
                 return ResponseEntity.ok(result);
             } else {
                 log.error("{} flow request processing failed for order: {}", flowName, otrRequest.getOrderNumber());
-                return ResponseEntity.status(500).body(result);
+                return ResponseEntity.status(200).body(result);
             }
 
         } catch (Exception e) {
@@ -140,7 +141,7 @@ public class OtrController {
             errorResponse.put("message", "Failed to process " + flowName + " request: " + e.getMessage());
             errorResponse.put("infobipResponse", null);
             
-            return ResponseEntity.status(500).body(errorResponse);
+            return ResponseEntity.status(200).body(errorResponse);
         }
     }
 } 

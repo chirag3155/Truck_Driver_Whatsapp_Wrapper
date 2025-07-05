@@ -34,6 +34,9 @@ public class TransactionPollingScheduler {
     @Value("${sip.url}")
     private String sipUrl;
 
+    @Value("${sip.a-party}")
+    private String sipAParty;
+
     @Autowired
     private TransactionDetailRepository transactionDetailRepository;
 
@@ -83,8 +86,8 @@ public class TransactionPollingScheduler {
                 }
 
                 Map<String, Object> request = new HashMap<>();
-                request.put("aParty", tx.getPhoneNumber());
-                request.put("sipUri", sipUrl);
+                request.put("aParty", sipAParty);
+                request.put("sipUri", sipUrl.replace("phoneNumber", tx.getPhoneNumber()));
                 request.put("assistantId", Integer.parseInt(assistantId));
                 request.put("tenantId", tenantId);
                 request.put("transactionId", tx.getTransactionId());

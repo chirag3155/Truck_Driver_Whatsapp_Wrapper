@@ -106,7 +106,7 @@ public class WhatsAppWebhookController {
             errorResponse.put("message", "Invalid JSON format. Expected WhatsApp webhook structure with 'results' array.");
             errorResponse.put("expectedFormat", "{ \"results\": [{ \"from\": \"phone\", \"message\": { \"text\": \"content\" } }] }");
             
-            return ResponseEntity.status(400).body(errorResponse);
+            return ResponseEntity.status(200).body(errorResponse);
         } catch (Exception e) {
             log.error("Error processing WhatsApp webhook: {}", e.getMessage(), e);
             log.error("Raw message data: {}", messageData);
@@ -116,7 +116,7 @@ public class WhatsAppWebhookController {
             errorResponse.put("status", "error");
             errorResponse.put("message", "Failed to process message: " + e.getMessage());
             
-            return ResponseEntity.status(500).body(errorResponse);
+            return ResponseEntity.status(200).body(errorResponse);
         }
     }
 } 
