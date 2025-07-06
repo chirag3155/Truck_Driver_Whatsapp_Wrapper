@@ -4,8 +4,11 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonProperty;
 
 import java.time.LocalDateTime;
+import java.time.ZonedDateTime;
 
 @Data
 @NoArgsConstructor
@@ -24,10 +27,16 @@ public class ConversationInfoResponse {
     private String tripId;
     private String flowName;
     private String communicationMode;
-    private String state;
-    private LocalDateTime lastActivity;
-    
-    // Status information
+
+    @JsonProperty("client_name")
+    private String clientName;
+
+    @JsonProperty("current_datatime")
+    private ZonedDateTime currentDatetime;
+
+    // Status information retained for internal use but hidden from response
     private boolean found;
+
+    @JsonIgnore
     private String message;
 } 

@@ -12,6 +12,8 @@ import org.springframework.web.bind.annotation.*;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
+import java.util.Map;
+import java.util.HashMap;
 
 @RestController
 @RequestMapping("/wawrapper/conversation")
@@ -27,7 +29,7 @@ public class ConversationInfoController {
      * GET /api/v1/conversation/{conversationId}/info
      */
     @GetMapping("/{conversationId}")
-    public ResponseEntity<ConversationInfoResponse> getConversationInfo(
+    public ResponseEntity<?> getConversationInfo(
             @PathVariable("conversationId") @NotBlank(message = "Conversation ID is required") String conversationId) {
         
         log.info("📞 API Request: Get conversation info for conversation ID: {}", conversationId);
@@ -44,29 +46,32 @@ public class ConversationInfoController {
                 return ResponseEntity.ok(response);
             } else {
                 log.warn("⚠️ API Response: Conversation not found for ID: {}", conversationId);
-                return ResponseEntity.status(HttpStatus.OK).body(response);
+                // Check if this is a default response (has default values) or a simple not found
+                if (response.getDriverName() != null) {
+                    // This is a default response
+                    return ResponseEntity.ok(response);
+                } else {
+                    // This is a simple not found - return just message
+                    Map<String, String> errorResponse = new HashMap<>();
+                    errorResponse.put("message", "No conversation found for ID: " + conversationId);
+                    return ResponseEntity.status(HttpStatus.OK).body(errorResponse);
+                }
             }
         } catch (Exception e) {
             log.error("❌ API Error: Failed to get conversation info for ID {}: {}", conversationId, e.getMessage(), e);
             
-            ConversationInfoResponse errorResponse = ConversationInfoResponse.builder()
-                .conversationId(conversationId)
-                .found(false)
-                .message("Internal server error: " + e.getMessage())
-                .build();
-                
+            Map<String, String> errorResponse = new HashMap<>();
+            errorResponse.put("message", "Internal server error: " + e.getMessage());
             return ResponseEntity.status(HttpStatus.OK).body(errorResponse);
         }
     }
-
-
 
     /**
      * Get conversation information by phone number (most recent open conversation)
      * GET /api/v1/conversation/phone/{phoneNumber}/info
      */
     @GetMapping("/phone/{phoneNumber}/info")
-    public ResponseEntity<ConversationInfoResponse> getConversationInfoByPhone(
+    public ResponseEntity<?> getConversationInfoByPhone(
             @PathVariable("phoneNumber") 
             @NotBlank(message = "Phone number is required")
             @Pattern(regexp = "^[0-9+\\-\\s()]{10,15}$", message = "Invalid phone number format")
@@ -82,18 +87,23 @@ public class ConversationInfoController {
                 return ResponseEntity.ok(response);
             } else {
                 log.warn("⚠️ API Response: No open conversation found for phone: {}", phoneNumber);
-                return ResponseEntity.status(HttpStatus.OK).body(response);
+                // Check if this is a default response (has default values) or a simple not found
+                if (response.getDriverName() != null) {
+                    // This is a default response
+                    return ResponseEntity.ok(response);
+                } else {
+                    // This is a simple not found - return just message
+                    Map<String, String> errorResponse = new HashMap<>();
+                    errorResponse.put("message", "No open conversation found for phone: " + phoneNumber);
+                    return ResponseEntity.status(HttpStatus.NOT_FOUND).body(errorResponse);
+                }
             }
         } catch (Exception e) {
             log.error("❌ API Error: Failed to get conversation info for phone {}: {}", phoneNumber, e.getMessage(), e);
             
-            ConversationInfoResponse errorResponse = ConversationInfoResponse.builder()
-                .phoneNumber(phoneNumber)
-                .found(false)
-                .message("Internal server error: " + e.getMessage())
-                .build();
-                
-            return ResponseEntity.status(HttpStatus.OK).body(errorResponse);
+            Map<String, String> errorResponse = new HashMap<>();
+            errorResponse.put("message", "Internal server error: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
         }
     }
 

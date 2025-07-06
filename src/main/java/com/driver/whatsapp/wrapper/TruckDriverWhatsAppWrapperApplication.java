@@ -15,6 +15,7 @@ import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
 public class TruckDriverWhatsAppWrapperApplication {
 
 	public static void main(String[] args) {
+		
 		SpringApplication.run(TruckDriverWhatsAppWrapperApplication.class, args);
 	}
 

@@ -6,8 +6,12 @@ import com.driver.whatsapp.wrapper.entity.TransactionDetail;
 import com.driver.whatsapp.wrapper.repository.TransactionDetailRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.util.Optional;
 
 @Service
@@ -16,6 +20,21 @@ public class ConversationInfoService {
 
     @Autowired
     private TransactionDetailRepository transactionDetailRepository;
+
+    @Value("${conversation.info.default.enabled:false}")
+    private boolean defaultEnabled;
+
+    // Hardcoded default values
+    private static final String DEFAULT_DRIVER_NAME = "Savan";
+    private static final String DEFAULT_PHONE_NUMBER = "+971000000000";
+    private static final String DEFAULT_SOURCE = "Gurgaon";
+    private static final String DEFAULT_DESTINATION = "Banglore";
+    private static final String DEFAULT_TRUCK_NUMBER = "DEFAULT-TRUCK-001";
+    private static final String DEFAULT_ORDER_NUMBER = "DEFAULT-ORDER-001";
+    private static final String DEFAULT_TRIP_ID = "DEFAULT-TRIP-001";
+    private static final String DEFAULT_FLOW_NAME = "OTR";
+    private static final String DEFAULT_COMMUNICATION_MODE = "whatsapp";
+    private static final String DEFAULT_CLIENT_NAME = "Malay";
 
     /**
      * Get conversation information by conversation ID
@@ -46,9 +65,8 @@ public class ConversationInfoService {
                     .tripId(transaction.getTripId())
                     .flowName(transaction.getFlowName())
                     .communicationMode(transaction.getCommunicationMode())
-                    .state(transaction.getState())
-                    .lastActivity(transaction.getUpdatedTimestamp() != null ? 
-                        transaction.getUpdatedTimestamp() : transaction.getTransactionTimestamp())
+                    .clientName(transaction.getClientName())
+                    .currentDatetime(ZonedDateTime.now(ZoneId.of("Asia/Kolkata")))
                     .found(true)
                     .message("Conversation information retrieved successfully")
                     .build();
@@ -60,17 +78,40 @@ public class ConversationInfoService {
             } else {
                 log.warn("⚠️ No conversation found for ID: {}", conversationId);
                 
-                return ConversationInfoResponse.builder()
-                    .conversationId(conversationId)
-                    .found(false)
-                    .message("No conversation found with the provided conversation ID")
-                    .build();
+                if (defaultEnabled) {
+                    log.info("🔄 Using default values for conversation ID: {}", conversationId);
+                    return ConversationInfoResponse.builder()
+                        .conversationId(conversationId)
+                        .driverName(DEFAULT_DRIVER_NAME)
+                        .phoneNumber(DEFAULT_PHONE_NUMBER)
+                        .source(DEFAULT_SOURCE)
+                        .destination(DEFAULT_DESTINATION)
+                        .eta(LocalDateTime.now(ZoneId.of("Asia/Kolkata")).plusDays(3))
+                        .truckNumber(DEFAULT_TRUCK_NUMBER)
+                        .orderNumber(DEFAULT_ORDER_NUMBER)
+                        .tripId(DEFAULT_TRIP_ID)
+                        .flowName(DEFAULT_FLOW_NAME)
+                        .communicationMode(DEFAULT_COMMUNICATION_MODE)
+                        .clientName(DEFAULT_CLIENT_NAME)
+                        .currentDatetime(ZonedDateTime.now(ZoneId.of("Asia/Kolkata")))
+                        .found(true)
+                        .message("Default conversation information provided")
+                        .build();
+                } else {
+                    return ConversationInfoResponse.builder()
+                        .conversationId(conversationId)
+                        .currentDatetime(ZonedDateTime.now(ZoneId.of("Asia/Kolkata")))
+                        .found(false)
+                        .message("No conversation found with the provided conversation ID")
+                        .build();
+                }
             }
         } catch (Exception e) {
             log.error("❌ Error fetching conversation info for ID {}: {}", conversationId, e.getMessage(), e);
             
             return ConversationInfoResponse.builder()
                 .conversationId(conversationId)
+                .currentDatetime(ZonedDateTime.now(ZoneId.of("Asia/Kolkata")))
                 .found(false)
                 .message("Error occurred while fetching conversation information: " + e.getMessage())
                 .build();
@@ -104,9 +145,8 @@ public class ConversationInfoService {
                     .tripId(transaction.getTripId())
                     .flowName(transaction.getFlowName())
                     .communicationMode(transaction.getCommunicationMode())
-                    .state(transaction.getState())
-                    .lastActivity(transaction.getUpdatedTimestamp() != null ? 
-                        transaction.getUpdatedTimestamp() : transaction.getTransactionTimestamp())
+                    .clientName(DEFAULT_CLIENT_NAME)
+                    .currentDatetime(ZonedDateTime.now(ZoneId.of("Asia/Kolkata")))
                     .found(true)
                     .message("Conversation information retrieved successfully")
                     .build();
@@ -118,17 +158,39 @@ public class ConversationInfoService {
             } else {
                 log.warn("⚠️ No open conversation found for phone: {}", phoneNumber);
                 
-                return ConversationInfoResponse.builder()
-                    .phoneNumber(phoneNumber)
-                    .found(false)
-                    .message("No open conversation found for the provided phone number")
-                    .build();
+                if (defaultEnabled) {
+                    log.info("🔄 Using default values for phone number: {}", phoneNumber);
+                    return ConversationInfoResponse.builder()
+                        .phoneNumber(phoneNumber)
+                        .driverName(DEFAULT_DRIVER_NAME)
+                        .source(DEFAULT_SOURCE)
+                        .destination(DEFAULT_DESTINATION)
+                        .eta(LocalDateTime.now(ZoneId.of("Asia/Kolkata")).plusDays(3))
+                        .truckNumber(DEFAULT_TRUCK_NUMBER)
+                        .orderNumber(DEFAULT_ORDER_NUMBER)
+                        .tripId(DEFAULT_TRIP_ID)
+                        .flowName(DEFAULT_FLOW_NAME)
+                        .communicationMode(DEFAULT_COMMUNICATION_MODE)
+                        .clientName(DEFAULT_CLIENT_NAME)
+                        .currentDatetime(ZonedDateTime.now(ZoneId.of("Asia/Kolkata")))
+                        .found(true)
+                        .message("Default conversation information provided")
+                        .build();
+                } else {
+                    return ConversationInfoResponse.builder()
+                        .phoneNumber(phoneNumber)
+                        .currentDatetime(ZonedDateTime.now(ZoneId.of("Asia/Kolkata")))
+                        .found(false)
+                        .message("No open conversation found for the provided phone number")
+                        .build();
+                }
             }
         } catch (Exception e) {
             log.error("❌ Error fetching conversation info for phone {}: {}", phoneNumber, e.getMessage(), e);
             
             return ConversationInfoResponse.builder()
                 .phoneNumber(phoneNumber)
+                .currentDatetime(ZonedDateTime.now(ZoneId.of("Asia/Kolkata")))
                 .found(false)
                 .message("Error occurred while fetching conversation information: " + e.getMessage())
                 .build();
