@@ -73,7 +73,8 @@ public class TruKKerService {
         String errorMessage,
         boolean loadingCompleted,
         String newEta,
-        boolean breakdown
+        boolean breakdown,
+        String currentStatus
     ) {
         String json = loadTemplate();
 
@@ -81,8 +82,10 @@ public class TruKKerService {
 
         if(tx.getCommunicationMode().equalsIgnoreCase("whatsapp")){
             actionType = "WhatsAppBot";
-        } else {
+        } else if(tx.getCommunicationMode().equalsIgnoreCase("calling")){
             actionType = "VoiceCallBot";
+        } else {
+            actionType = "HumanEscalation";
         }
 
         String type = null;
@@ -104,19 +107,24 @@ public class TruKKerService {
         json = json.replace("${UNIQUE_ID}", tx.getUniqueId() != null ? tx.getUniqueId() : "");
         json = json.replace("${TRIP_ID}", tx.getTripId() != null ? tx.getTripId() : "");
         json = json.replace("${ORDER_ID}", tx.getOrderNumber() != null ? tx.getOrderNumber() : "");
+        json = json.replace("${IS_REACHED}", String.valueOf(false));
         json = json.replace("${LOADING_COMPLETED}", String.valueOf(loadingCompleted));
         json = json.replace("${NEW_ETA}", newEta != null ? newEta.toString() : "");
         json = json.replace("${breakdown}", String.valueOf(breakdown));
+        if(currentStatus != null){
+            json = json.replace("Upcoming", currentStatus);
+        }
         return json;
     }
 
     /**
      * Update driver status when they confirm they're on time
      */
-    public void updateDriverStatusOnTime(String url, TransactionDetail tx) {
+    public void updateDriverStatusOnTime(String url, TransactionDetail tx,String newEta) {
         try {
+           
             String requestBody = buildRequestBodyFromTemplate(
-                tx, "Success", "", false, null, false
+                tx, "Success", "", false, newEta!=null?newEta:null, false,null
             );
             sendToTrukkerAndCloseTransaction(url, tx, requestBody);
             log.info("Updated TruKKer system - Driver on time for order: {}", tx.getOrderNumber());
@@ -131,7 +139,7 @@ public class TruKKerService {
     public void updateNewEta(String url, TransactionDetail tx, String delayReason, String newEta) {
         try {
             String requestBody = buildRequestBodyFromTemplate(
-                tx, "Failure", delayReason, false, newEta, false
+                tx, "success", delayReason, false, newEta!=null?newEta:null, false,null
             );
             sendToTrukkerAndCloseTransaction(url, tx, requestBody);
             log.info("Updated TruKKer system - New ETA {} for order: {}", tx.getNewETA(), tx.getOrderNumber());
@@ -143,10 +151,10 @@ public class TruKKerService {
     /**
      * Update driver status when they report a breakdown
      */
-    public void updateDriverStatusBreakdown(String url, TransactionDetail tx, String breakdownReason) {
+    public void updateDriverStatusBreakdown(String url, TransactionDetail tx, String breakdownReason,String currentStatus) {
         try {
             String requestBody = buildRequestBodyFromTemplate(
-                tx, "Failure", breakdownReason, false, null, true
+                tx, "failed", breakdownReason, false, null, true,currentStatus
             );
             sendToTrukkerAndCloseTransaction(url, tx, requestBody);
             log.info("Updated TruKKer system - Driver breakdown for order: {}", tx.getOrderNumber());
@@ -158,7 +166,7 @@ public class TruKKerService {
     public void updateTrukkerForHumanEscalation(String url, TransactionDetail tx) {
         try {
             String requestBody = buildRequestBodyFromTemplate(
-                tx, "Failure", "Call Not Received", false, null, true
+                tx, "failed", "Call Not Received", false, null, true,""
             );
             sendToTrukkerAndCloseTransaction(url, tx, requestBody);
             log.info("Updated TruKKer system - Human escalation for order: {}", tx.getOrderNumber());

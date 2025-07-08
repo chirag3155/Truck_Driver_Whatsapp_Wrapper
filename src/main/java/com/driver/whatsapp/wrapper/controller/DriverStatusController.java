@@ -94,14 +94,14 @@ public class DriverStatusController {
                 }
 
         switch (action.toLowerCase()) {
-            case "on-time":
-                truKKerService.updateDriverStatusOnTime(url, tx);
+            case "on-time":  // on-time
+                truKKerService.updateDriverStatusOnTime(url, tx,request.getNewEta());
                 break;
-            case "new-eta":
+            case "new-eta": // on my way/newETA/delay
                 truKKerService.updateNewEta(url, tx, request.getDelayReason(), request.getNewEta());
                 break;
-            case "breakdown":
-                truKKerService.updateDriverStatusBreakdown(url, tx, request.getDelayReason());
+            case "breakdown": // cancel
+                truKKerService.updateDriverStatusBreakdown(url, tx, request.getDelayReason(),"cancelled");
                 break;
             default:
                 return ResponseEntity.status(200).body("Invalid action: " + action);
