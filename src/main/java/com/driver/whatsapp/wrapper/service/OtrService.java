@@ -14,9 +14,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.*;
 import org.springframework.stereotype.Service;
-import org.springframework.web.client.RestTemplate;
 
 import java.security.MessageDigest;
 import java.time.LocalDateTime;
@@ -26,6 +24,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
+
+import com.driver.whatsapp.wrapper.utils.DateTimeFormatUtil;
 
 @Service
 @Slf4j
@@ -42,6 +42,9 @@ public class OtrService {
     
     @Autowired
     private ChatModuleService chatModuleService;
+    
+    @Autowired
+    private DateTimeFormatUtil dateTimeFormatUtil;
     
     @Value("${infobip.whatsapp.from}")
     private String whatsappFromNumber;
@@ -550,9 +553,31 @@ public class OtrService {
             case "clientname":
                 return request.getClientName() != null ? request.getClientName() : "Client";
             case "movedate":
-                return request.getOrderDate() != null ? formatDateTimeHumanReadable(request.getOrderDate().toString()) : "Today";
+                if (request.getOrderDate() != null) {
+                    try {
+                        // Handle both LocalDateTime and String inputs
+                        String formatted = dateTimeFormatUtil.formatOrderDate(request.getOrderDate());
+                        log.info("�� DEBUG - Order Date formatted: {}", formatted);
+                        return formatted;
+                    } catch (Exception e) {
+                        log.error("❌ Error formatting order date: {}", e.getMessage());
+                        return "Today";
+                    }
+                }
+                return "Today";
             case "eta":
-                return request.getEta() != null ? formatDateTimeHumanReadable(request.getEta().toString()) : "10:00 AM";
+                if (request.getEta() != null) {
+                    try {
+                        // Handle both LocalDateTime and String inputs
+                        String formatted = dateTimeFormatUtil.formatEtaTime(request.getEta());
+                        log.info("🔍 DEBUG - ETA formatted: {}", formatted);
+                        return formatted;
+                    } catch (Exception e) {
+                        log.error("❌ Error formatting ETA: {}", e.getMessage());
+                        return "6:30 PM";
+                    }
+                }
+                return "6:30 PM";
             default:
                 return null;
         }
@@ -635,7 +660,7 @@ public class OtrService {
             case "clientname":
                 return request.getClientName() != null ? request.getClientName() : "Client";
             case "eta":
-                return request.getEta() != null ? formatDateTimeHumanReadable(request.getEta().toString()) : "10:00 AM";
+                return request.getEta() != null ? dateTimeFormatUtil.formatEtaTime(request.getEta().toString()) : "6:30 PM";
             case "commodity":
                 return request.getCommodity() != null ? request.getCommodity() : "Cargo";
             case "ordernumber":
@@ -723,14 +748,27 @@ public class OtrService {
     private List<String> getPlaceholdersForFlow(OtrRequest request, FlowType flowType) {
         switch (flowType) {
             case OTR:
+                String formattedOrderDate = "scheduled time";
+                String formattedEtaTime = "scheduled time";
+                
+                if (request.getOrderDate() != null) {
+                    formattedOrderDate = dateTimeFormatUtil.formatOrderDate(request.getOrderDate());
+                    log.info("🔍 DEBUG - getPlaceholdersForFlow Order Date: {} -> Formatted: {}", request.getOrderDate(), formattedOrderDate);
+                }
+                
+                if (request.getEta() != null) {
+                    formattedEtaTime = dateTimeFormatUtil.formatEtaTime(request.getEta());
+                    log.info("🔍 DEBUG - getPlaceholdersForFlow ETA: {} -> Formatted: {}", request.getEta(), formattedEtaTime);
+                }
+                
                 return Arrays.asList(
                     request.getDriverName() != null ? request.getDriverName() : "Driver",
                     request.getTruckNumber(),     
                     request.getPickUpLocation(),
                     request.getDropOffLocation(),
                     request.getClientName(),   
-                    request.getOrderDate() != null ? formatDateTimeHumanReadable(request.getOrderDate().toString()) : "scheduled time",
-                    request.getEta() != null ? formatDateTimeHumanReadable(request.getEta().toString()) : "scheduled time"
+                    formattedOrderDate,
+                    formattedEtaTime
                 );
             case LOADING_CONFIRMATION:
                 return Arrays.asList(
@@ -750,7 +788,7 @@ public class OtrService {
                 return Arrays.asList(
                     request.getDriverName() != null ? request.getDriverName() : "Driver",
                     request.getOrderNumber(),
-                    request.getEta() != null ? formatDateTimeHumanReadable(request.getEta().toString()) : "scheduled time",
+                    request.getEta() != null ? dateTimeFormatUtil.formatEtaTime(request.getEta().toString()) : "scheduled time",
                     request.getTruckNumber()
                 );
             case STATUS_FOLLOW_UP:
@@ -765,7 +803,7 @@ public class OtrService {
                     request.getDriverName() != null ? request.getDriverName() : "Driver",
                     request.getPickUpLocation(),
                     request.getDropOffLocation(),
-                    request.getEta() != null ? formatDateTimeHumanReadable(request.getEta().toString()) : "scheduled time"
+                    request.getEta() != null ? dateTimeFormatUtil.formatEtaTime(request.getEta().toString()) : "scheduled time"
                 );
         }
     }
@@ -1334,59 +1372,6 @@ public class OtrService {
                 return "Hi {0}! We need a status update for Order {1}, Truck {2}. Current status: {3}. Please respond.";
             default:
                 return "Hello {0}! Update for Order {1}. ETA: {2}, Truck: {3}. Please respond with your status.";
-        }
-    }
-    
-    /**
-     * Format date/time to human readable format like "July 3rd 2pm"
-     */
-    private String formatDateTimeHumanReadable(String dateTimeStr) {
-        try {
-            if (dateTimeStr == null || dateTimeStr.trim().isEmpty()) {
-                return "scheduled time";
-            }
-            
-            // Parse the datetime string
-            java.time.LocalDateTime dateTime;
-            if (dateTimeStr.contains("T")) {
-                dateTime = java.time.LocalDateTime.parse(dateTimeStr.substring(0, 19));
-            } else {
-                dateTime = java.time.LocalDateTime.parse(dateTimeStr);
-            }
-            
-            // Format to "July 3rd 2pm"
-            java.time.format.DateTimeFormatter monthFormatter = java.time.format.DateTimeFormatter.ofPattern("MMMM");
-            String month = dateTime.format(monthFormatter);
-            
-            int day = dateTime.getDayOfMonth();
-            String dayWithSuffix = day + getDayNumberSuffix(day);
-            
-            int hour = dateTime.getHour();
-            String timeFormat = hour == 0 ? "12am" : 
-                               hour < 12 ? hour + "am" :
-                               hour == 12 ? "12pm" :
-                               (hour - 12) + "pm";
-            
-            return month + " " + dayWithSuffix + " " + timeFormat;
-            
-        } catch (Exception e) {
-            log.warn("Error formatting datetime '{}': {}", dateTimeStr, e.getMessage());
-            return dateTimeStr; // Return original if parsing fails
-        }
-    }
-    
-    /**
-     * Get day number suffix (st, nd, rd, th)
-     */
-    private String getDayNumberSuffix(int day) {
-        if (day >= 11 && day <= 13) {
-            return "th";
-        }
-        switch (day % 10) {
-            case 1: return "st";
-            case 2: return "nd";
-            case 3: return "rd";
-            default: return "th";
         }
     }
 } 

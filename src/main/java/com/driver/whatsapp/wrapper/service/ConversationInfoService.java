@@ -4,6 +4,7 @@ import com.driver.whatsapp.wrapper.dto.ConversationInfoRequest;
 import com.driver.whatsapp.wrapper.dto.ConversationInfoResponse;
 import com.driver.whatsapp.wrapper.entity.TransactionDetail;
 import com.driver.whatsapp.wrapper.repository.TransactionDetailRepository;
+import com.driver.whatsapp.wrapper.utils.DateTimeFormatUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -21,6 +22,9 @@ public class ConversationInfoService {
     @Autowired
     private TransactionDetailRepository transactionDetailRepository;
 
+    @Autowired
+    private DateTimeFormatUtil dateTimeFormatUtil;
+
     @Value("${conversation.info.default.enabled:false}")
     private boolean defaultEnabled;
 
@@ -32,7 +36,7 @@ public class ConversationInfoService {
     private static final String DEFAULT_TRUCK_NUMBER = "DEFAULT-TRUCK-001";
     private static final String DEFAULT_ORDER_NUMBER = "DEFAULT-ORDER-001";
     private static final String DEFAULT_TRIP_ID = "DEFAULT-TRIP-001";
-    private static final String DEFAULT_FLOW_NAME = "OTR";
+    private static final String DEFAULT_FLOW_NAME = "";
     private static final String DEFAULT_COMMUNICATION_MODE = "whatsapp";
     private static final String DEFAULT_CLIENT_NAME = "Malay";
 
@@ -52,14 +56,15 @@ public class ConversationInfoService {
                 
                 log.info("✅ Found conversation details for ID: {}", conversationId);
                 
-                // Map entity to response DTO
+                // Map entity to response DTO with formatted dates
                 ConversationInfoResponse response = ConversationInfoResponse.builder()
                     .conversationId(transaction.getConversationId())
                     .driverName(transaction.getDriverName())
                     .phoneNumber(transaction.getPhoneNumber())
                     .source(transaction.getPickUpLocation())
                     .destination(transaction.getDropOffLocation())
-                    .eta(transaction.getEtaTime())
+                    .orderDate(dateTimeFormatUtil.formatOrderDate(transaction.getOrderDate()))  // Format order date
+                    .eta(dateTimeFormatUtil.formatEtaTime(transaction.getEtaTime()))             // Format ETA time
                     .truckNumber(transaction.getTruckNumber())
                     .orderNumber(transaction.getOrderNumber())
                     .tripId(transaction.getTripId())
@@ -80,13 +85,18 @@ public class ConversationInfoService {
                 
                 if (defaultEnabled) {
                     log.info("🔄 Using default values for conversation ID: {}", conversationId);
+                    // Create default dates and format them
+                    LocalDateTime defaultOrderDate = LocalDateTime.now().minusHours(2);
+                    LocalDateTime defaultEtaTime = LocalDateTime.now().plusHours(4);
+                    
                     return ConversationInfoResponse.builder()
                         .conversationId(conversationId)
                         .driverName(DEFAULT_DRIVER_NAME)
                         .phoneNumber(DEFAULT_PHONE_NUMBER)
                         .source(DEFAULT_SOURCE)
                         .destination(DEFAULT_DESTINATION)
-                        .eta(LocalDateTime.now(ZoneId.of("Asia/Kolkata")).plusDays(3))
+                        .orderDate(dateTimeFormatUtil.formatOrderDate(defaultOrderDate))  // Format default order date
+                        .eta(dateTimeFormatUtil.formatEtaTime(defaultEtaTime))             // Format default ETA
                         .truckNumber(DEFAULT_TRUCK_NUMBER)
                         .orderNumber(DEFAULT_ORDER_NUMBER)
                         .tripId(DEFAULT_TRIP_ID)
@@ -132,14 +142,15 @@ public class ConversationInfoService {
                 
                 log.info("✅ Found open conversation for phone: {}", phoneNumber);
                 
-                // Map entity to response DTO
+                // Map entity to response DTO with formatted dates
                 ConversationInfoResponse response = ConversationInfoResponse.builder()
                     .conversationId(transaction.getConversationId())
                     .driverName(transaction.getDriverName())
                     .phoneNumber(transaction.getPhoneNumber())
                     .source(transaction.getPickUpLocation())
                     .destination(transaction.getDropOffLocation())
-                    .eta(transaction.getEtaTime())
+                    .orderDate(dateTimeFormatUtil.formatOrderDate(transaction.getOrderDate()))  // Format order date
+                    .eta(dateTimeFormatUtil.formatEtaTime(transaction.getEtaTime()))             // Format ETA time
                     .truckNumber(transaction.getTruckNumber())
                     .orderNumber(transaction.getOrderNumber())
                     .tripId(transaction.getTripId())
@@ -160,12 +171,17 @@ public class ConversationInfoService {
                 
                 if (defaultEnabled) {
                     log.info("🔄 Using default values for phone number: {}", phoneNumber);
+                    // Create default dates and format them
+                    LocalDateTime defaultOrderDate = LocalDateTime.now().minusHours(2);
+                    LocalDateTime defaultEtaTime = LocalDateTime.now().plusHours(4);
+                    
                     return ConversationInfoResponse.builder()
                         .phoneNumber(phoneNumber)
                         .driverName(DEFAULT_DRIVER_NAME)
                         .source(DEFAULT_SOURCE)
                         .destination(DEFAULT_DESTINATION)
-                        .eta(LocalDateTime.now(ZoneId.of("Asia/Kolkata")).plusDays(3))
+                        .orderDate(dateTimeFormatUtil.formatOrderDate(defaultOrderDate))  // Format default order date
+                        .eta(dateTimeFormatUtil.formatEtaTime(defaultEtaTime))             // Format default ETA
                         .truckNumber(DEFAULT_TRUCK_NUMBER)
                         .orderNumber(DEFAULT_ORDER_NUMBER)
                         .tripId(DEFAULT_TRIP_ID)

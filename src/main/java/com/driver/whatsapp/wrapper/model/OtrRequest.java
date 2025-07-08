@@ -63,4 +63,13 @@ public class OtrRequest {
     
     // @JsonProperty("transactionId")
     // private String transactionId;
+
+    // Getters
+    public LocalDateTime getOrderDate() {
+        return orderDate;
+    }
+    
+    public LocalDateTime getEta() {
+        return eta;
+    }
 } 

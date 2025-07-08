@@ -7,7 +7,6 @@ import lombok.Builder;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
-import java.time.LocalDateTime;
 import java.time.ZonedDateTime;
 
 @Data
@@ -21,7 +20,8 @@ public class ConversationInfoResponse {
     private String phoneNumber;
     private String source;
     private String destination;
-    private LocalDateTime eta;
+    private String orderDate;
+    private String eta;
     private String truckNumber;
     private String orderNumber;
     private String tripId;
