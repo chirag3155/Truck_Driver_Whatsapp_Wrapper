@@ -26,6 +26,7 @@ import java.util.Map;
 import java.util.Random;
 
 import com.driver.whatsapp.wrapper.utils.DateTimeFormatUtil;
+import com.driver.whatsapp.wrapper.dto.FlowResponse;
 
 @Service
 @Slf4j
@@ -60,7 +61,7 @@ public class OtrService {
     /**
      * Process dynamic flow request (OTR, Loading Confirmation, etc.)
      */
-    public Map<String, Object> processFlowRequest(OtrRequest request, String flowName, String communicationMode) {
+    public FlowResponse processFlowRequest(OtrRequest request, String flowName, String communicationMode) {
         try {
             // Validate flow type
             if (!FlowType.isValid(flowName)) {
@@ -87,7 +88,7 @@ public class OtrService {
             transactionDetailRepository.save(transactionDetail);
             log.info("Transaction detail saved for flow: {}, conversation ID: {}, transaction ID: {}", flowName, conversationId, transactionId);
             
-            // ✅ Close all other transactions, keep only this one as "open"
+            // Close all other transactions, keep only this one as "open"
             closeAllOtherTransactions(request.getPhoneNumber(), conversationId);
             
             // Send request to chat module to generate response (for logging purposes only)
@@ -98,9 +99,11 @@ public class OtrService {
             // Create template message from database (this is what will be sent to driver)
             List<WhatsAppMessage.Message> templateMessages = createTemplateMessageFromDatabase(request, flowType, communicationMode);
             log.info("Template messages: {}", templateMessages);
+            
             // Log and extract template message content for response
             String templateMessageContent = extractAndLogTemplateContent(templateMessages, flowType);
             log.info("Template message content: {}", templateMessageContent);
+            
             // Send the database template message to driver (not chat module response)
             Map<String, Object> sendResult = sendTemplateMessage(templateMessages);
             boolean messageSent = (Boolean) sendResult.get("success");
@@ -110,29 +113,26 @@ public class OtrService {
             transactionDetail.setStatusCode(statusCode);
             transactionDetailRepository.save(transactionDetail);
             
-            // Prepare clean response based on InfoBip success/failure
-            Map<String, Object> response = new HashMap<>();
-            
-            if (messageSent) {
-                response.put("status", "success");
-                response.put("message", flowName + " request processed successfully");
-            } else {
-                response.put("status", "error");
-                response.put("message", "Failed to send " + flowName + " message: " + sendResult.get("message"));
+            if (!messageSent) {
+                throw new RuntimeException("Failed to send " + flowName + " message: " + sendResult.get("message"));
             }
+
+            log.info("Flow response: {}", request);
             
-            // Only include InfoBip response details
-            response.put("infobipResponse", sendResult.get("infobipResponse"));
-            
-            return response;
+            return FlowResponse.builder()
+            .transactionId(transactionId)
+            .phoneNumber(request.getPhoneNumber())
+            .orderNumber(request.getOrderNumber())
+            .truckNumber(request.getTruckNumber())
+            .uniqueId(request.getUniqueId())
+            .tripId(request.getTripId())
+            .flowName(flowName)
+            .build();
+        
             
         } catch (Exception e) {
             log.error("Error processing {} request: {}", flowName, e.getMessage(), e);
-            Map<String, Object> errorResponse = new HashMap<>();
-            errorResponse.put("status", "error");
-            errorResponse.put("message", "Failed to process " + flowName + " request: " + e.getMessage());
-            errorResponse.put("infobipResponse", null);
-            return errorResponse;
+            throw e;
         }
     }
     

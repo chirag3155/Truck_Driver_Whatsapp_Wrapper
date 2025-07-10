@@ -36,7 +36,7 @@ public class TransactionDetail {
     @Column(name = "order_date", nullable = false)
     private LocalDateTime orderDate;
     
-    @Column(name = "eta_time", nullable = false)
+    @Column(name = "eta_time", nullable = true)
     private LocalDateTime etaTime;
 
     @Column(name = "new_eta", nullable = true)

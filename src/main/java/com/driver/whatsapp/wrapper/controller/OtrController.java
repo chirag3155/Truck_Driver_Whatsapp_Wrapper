@@ -3,6 +3,8 @@ package com.driver.whatsapp.wrapper.controller;
 import com.driver.whatsapp.wrapper.model.FlowType;
 import com.driver.whatsapp.wrapper.model.OtrRequest;
 import com.driver.whatsapp.wrapper.service.OtrService;
+import com.driver.whatsapp.wrapper.dto.ApiGenericResponse;
+import com.driver.whatsapp.wrapper.dto.FlowResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
@@ -16,8 +18,6 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 
 import jakarta.validation.Valid;
-import java.util.HashMap;
-import java.util.Map;
 
 @RestController
 @RequestMapping("/wawrapper")
@@ -28,9 +28,6 @@ public class OtrController {
     @Autowired
     private OtrService otrService;
 
-    /**
-     * Generate dynamic flow conversation and send message to driver
-     */
     @Operation(
         summary = "Generate Dynamic Flow Conversation",
         description = "Creates a new conversation for any flow type (OTR, Loading Confirmation, Order Completion, Reminder, Status Follow-up), " +
@@ -45,14 +42,12 @@ public class OtrController {
                 examples = @ExampleObject(
                     value = """
                     {
-                      "status": "success",
-                      "message": "OTR request processed successfully",
-                      "infobipResponse": {
-                        "success": true,
-                        "statusCode": 200,
-                        "statusMessage": "200 OK",
-                        "responseBody": "{\\"messages\\":[{\\"messageId\\":\\"TMPL_123\\",\\"status\\":{\\"groupId\\":1,\\"groupName\\":\\"PENDING\\",\\"id\\":26,\\"name\\":\\"MESSAGE_ACCEPTED\\",\\"description\\":\\"Message sent to next instance\\"}}]}",
-                        "message": "Template message sent successfully to InfoBip"
+                      "status": 200,
+                      "message": "Flow request processed successfully",
+                      "path": "/wawrapper/otr/generate",
+                      "timestamp": "2024-01-01T12:00:00",
+                      "data": {
+                        "transactionId": "txn_123456"
                       }
                     }
                     """
@@ -67,9 +62,11 @@ public class OtrController {
                 examples = @ExampleObject(
                     value = """
                     {
-                      "status": "error",
+                      "status": 400,
                       "message": "Invalid flow type: INVALID_FLOW",
-                      "infobipResponse": null
+                      "path": "/wawrapper/invalid/generate",
+                      "timestamp": "2024-01-01T12:00:00",
+                      "data": null
                     }
                     """
                 )
@@ -83,16 +80,11 @@ public class OtrController {
                 examples = @ExampleObject(
                     value = """
                     {
-                      "status": "error",
-                      "message": "Failed to send OTR message: InfoBip Client Error: 400 Bad Request",
-                      "infobipResponse": {
-                        "success": false,
-                        "statusCode": 400,
-                        "statusMessage": "400 BAD_REQUEST",
-                        "responseBody": "{\\"requestError\\":{\\"serviceException\\":{\\"messageId\\":\\"BAD_REQUEST\\",\\"text\\":\\"Bad request\\",\\"validationErrors\\":{\\"messages[0].content.templateName\\":[\\"must be composed only of lowercase letters, numbers and underscores\\"]}}}}",
-                        "message": "InfoBip Client Error: 400 Bad Request",
-                        "errorType": "CLIENT_ERROR"
-                      }
+                      "status": 500,
+                      "message": "Failed to process flow request",
+                      "path": "/wawrapper/otr/generate",
+                      "timestamp": "2024-01-01T12:00:00",
+                      "data": null
                     }
                     """
                 )
@@ -100,7 +92,7 @@ public class OtrController {
         )
     })
     @PostMapping("/{flow_name}/generate")
-    public ResponseEntity<Map<String, Object>> generateFlow(
+    public ResponseEntity<ApiGenericResponse<FlowResponse>> generateFlow(
         @PathVariable("flow_name") String flowName,
         @RequestParam(value = "communication_mode", defaultValue = "whatsapp") String communicationMode,
         @Valid @RequestBody OtrRequest otrRequest) {
@@ -111,37 +103,45 @@ public class OtrController {
             // Validate flow type
             if (!FlowType.isValid(flowName)) {
                 log.error("Invalid flow type: {}", flowName);
-                Map<String, Object> errorResponse = new HashMap<>();
-                errorResponse.put("status", "error");
-                errorResponse.put("message", "Invalid flow type: " + flowName + ". Valid types: " + 
-                    String.join(", ", FlowType.LOADING_CONFIRMATION.getValue(), FlowType.ORDER_COMPLETION.getValue(), 
-                               FlowType.OTR.getValue(), FlowType.REMINDER.getValue(), FlowType.STATUS_FOLLOW_UP.getValue()));
-                errorResponse.put("infobipResponse", null);
-                // return ResponseEntity.badRequest().body(errorResponse);
-                return ResponseEntity.status(200).body(errorResponse);
+                return ResponseEntity.ok(ApiGenericResponse.<FlowResponse>builder()
+                    .status(400)
+                    .message("Invalid flow type: " + flowName + ". Valid types: " + 
+                        String.join(", ", FlowType.LOADING_CONFIRMATION.getValue(), FlowType.ORDER_COMPLETION.getValue(), 
+                                   FlowType.OTR.getValue(), FlowType.REMINDER.getValue(), FlowType.STATUS_FOLLOW_UP.getValue()))
+                    .path("/wawrapper/" + flowName + "/generate")
+                    .data(null)
+                    .build());
             }
 
             // Process flow request
-            Map<String, Object> result = otrService.processFlowRequest(otrRequest, flowName, communicationMode);
+            FlowResponse response = otrService.processFlowRequest(otrRequest, flowName, communicationMode);
             
-            // Determine HTTP status based on result
-            if ("success".equals(result.get("status"))) {
-                log.info("{} flow request processed successfully for order: {}", flowName, otrRequest.getOrderNumber());
-                return ResponseEntity.ok(result);
-            } else {
-                log.error("{} flow request processing failed for order: {}", flowName, otrRequest.getOrderNumber());
-                return ResponseEntity.status(200).body(result);
-            }
+            return ResponseEntity.ok(ApiGenericResponse.<FlowResponse>builder()
+                .status(200)
+                .message("Flow request processed successfully")
+                .path("/wawrapper/" + flowName + "/generate")
+                .data(response)
+                .build());
 
-        } catch (Exception e) {
+        } catch (RuntimeException e) {
             log.error("Error processing {} flow generate request: {}", flowName, e.getMessage(), e);
             
-            Map<String, Object> errorResponse = new HashMap<>();
-            errorResponse.put("status", "error");
-            errorResponse.put("message", "Failed to process " + flowName + " request: " + e.getMessage());
-            errorResponse.put("infobipResponse", null);
+            return ResponseEntity.ok(ApiGenericResponse.<FlowResponse>builder()
+                .status(200)
+                .message(e.getMessage())
+                .path("/wawrapper/" + flowName + "/generate")
+                .data(null)
+                .build());
+        } 
+        catch (Exception e) {
+            log.error("Error processing {} flow generate request: {}", flowName, e.getMessage(), e);
             
-            return ResponseEntity.status(200).body(errorResponse);
+            return ResponseEntity.ok(ApiGenericResponse.<FlowResponse>builder()
+                .status(500)
+                .message("Failed to process " + flowName + " request: " + e.getMessage())
+                .path("/wawrapper/" + flowName + "/generate")
+                .data(null)
+                .build());
         }
     }
 } 
