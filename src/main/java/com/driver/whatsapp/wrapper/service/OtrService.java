@@ -1,14 +1,14 @@
 package com.driver.whatsapp.wrapper.service;
 
-import com.driver.whatsapp.wrapper.entity.ApiAssistantMapping;
-import com.driver.whatsapp.wrapper.entity.ApiAssistantMappingId;
+
 import com.driver.whatsapp.wrapper.entity.TransactionDetail;
 import com.driver.whatsapp.wrapper.entity.TransactionDetailId;
 import com.driver.whatsapp.wrapper.model.FlowType;
 import com.driver.whatsapp.wrapper.model.OtrRequest;
 import com.driver.whatsapp.wrapper.model.TemplateMessage;
 import com.driver.whatsapp.wrapper.model.WhatsAppMessage;
-import com.driver.whatsapp.wrapper.repository.ApiAssistantMappingRepository;
+import com.driver.whatsapp.wrapper.entity.ApiTemplateMapping;
+import com.driver.whatsapp.wrapper.repository.ApiTemplateMappingRepository;
 import com.driver.whatsapp.wrapper.repository.TransactionDetailRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
@@ -36,7 +36,7 @@ public class OtrService {
     private TransactionDetailRepository transactionDetailRepository;
 
     @Autowired
-    private ApiAssistantMappingRepository apiAssistantMappingRepository;
+    private ApiTemplateMappingRepository apiTemplateMappingRepository;
     
     @Autowired
     private WhatsAppService whatsAppService;
@@ -74,13 +74,17 @@ public class OtrService {
             String conversationId = generateConversationId();
             String transactionId = generateTransactionId();
 
-            // Get API assistant mapping dynamically based on flow type and communication mode
-            ApiAssistantMapping apiAssistantMapping = apiAssistantMappingRepository
-                .findById(new ApiAssistantMappingId(flowName, communicationMode))
-                .orElseThrow(() -> new RuntimeException("Api Assistant Mapping not found for flow: " + flowName + " and mode: " + communicationMode));
+            // Get tenantId and assistantId from the request
+            String tenantId = request.getTenantId();
+            String assistantId = request.getAssistantId();
             
-            String tenantId = apiAssistantMapping.getTenantId();
-            String assistantId = apiAssistantMapping.getAssistantId();
+            // Validate required fields
+            if (tenantId == null || tenantId.trim().isEmpty()) {
+                throw new IllegalArgumentException("tenantId is required in the request");
+            }
+            if (assistantId == null || assistantId.trim().isEmpty()) {
+                throw new IllegalArgumentException("assistantId is required in the request");
+            }
             
             // Create and save transaction detail
             TransactionDetail transactionDetail = createTransactionDetail(request, transactionId, conversationId, communicationMode);
@@ -435,24 +439,30 @@ public class OtrService {
     }
 
     /**
-     * Create template message for different flow types from database
+     * Create template message for different flow types from api_template_mapping
      */
     private List<WhatsAppMessage.Message> createTemplateMessage(OtrRequest request, String chatResponse, FlowType flowType, String communicationMode) {
         try {
-            // Get API assistant mapping which now includes template data
-            ApiAssistantMapping apiAssistantMapping = apiAssistantMappingRepository
-                .findById(new ApiAssistantMappingId(flowType.getValue(), communicationMode))
-                .orElseThrow(() -> new RuntimeException("Api Assistant Mapping not found for flow: " + flowType.getValue() + " and mode: " + communicationMode));
+            // Get language from request, default to "en" if not provided
+            String lang = request.getLang() != null ? request.getLang() : "en";
+            
+            // Get template name based on flow type
+            String templateName = getTemplateNameForFlow(flowType);
+            
+            // Try to get template from api_template_mapping table
+            ApiTemplateMapping apiTemplateMapping = apiTemplateMappingRepository
+                .findByApiNameAndLangAndTemplateName(flowType.getValue(), lang, templateName)
+                .orElseThrow(() -> new RuntimeException("No template found in api_template_mapping for flow: " + flowType.getValue() + " and lang: " + lang + " and template: " + templateName));
             
             // Parse template from database
-            TemplateMessage templateConfig = parseTemplateFromDatabase(apiAssistantMapping.getTemplateMessage());
+            TemplateMessage templateConfig = parseTemplateFromDatabase(apiTemplateMapping.getTemplate());
             if (templateConfig == null) {
-                log.warn("No template found in database for flow: {}, using fallback", flowType.getValue());
+                log.warn("No template config found for flow: {}, using fallback", flowType.getValue());
                 return createFallbackTemplateMessage(request, flowType);
             }
             
             // Fill placeholders with actual data
-            List<String> placeholderValues = fillPlaceholders(templateConfig.getPlaceholders(), request,flowType);
+            List<String> placeholderValues = fillPlaceholders(templateConfig.getPlaceholders(), request, flowType);
             
             // Convert buttons from config to WhatsApp buttons
             List<WhatsAppMessage.Button> buttons = convertButtons(templateConfig.getButtons());
@@ -483,7 +493,7 @@ public class OtrService {
             return Arrays.asList(message);
             
         } catch (Exception e) {
-            log.error("Error creating template message from database: {}", e.getMessage(), e);
+            log.error("Error creating template message from api_template_mapping: {}", e.getMessage(), e);
             return createFallbackTemplateMessage(request, flowType);
         }
     }
@@ -728,7 +738,7 @@ public class OtrService {
     private String getTemplateNameForFlow(FlowType flowType) {
         switch (flowType) {
             case OTR:
-                return "al_otr_en";
+                return "ai_otr_en";
             case LOADING_CONFIRMATION:
                 return "ai_loading_confirmation";
             case ORDER_COMPLETION:
@@ -898,52 +908,68 @@ public class OtrService {
     }
 
     /**
-     * Create template message from database without using chat response
+     * Create template message from api_template_mapping without using chat response
      * SIMPLIFIED VERSION - Works for all flows
      */
     private List<WhatsAppMessage.Message> createTemplateMessageFromDatabase(OtrRequest request, FlowType flowType, String communicationMode) {
         try {
             log.info("🔍 Creating template message for flow: {}, communication mode: {}", flowType.getValue(), communicationMode);
             
-            // Try to get from database first
-            ApiAssistantMapping apiAssistantMapping = null;
-            TemplateMessage templateConfig = null;
+            // Get language from request, default to "en" if not provided
+            String lang = request.getLang() != null ? request.getLang() : "en";
+            log.info("📝 Using language: {} for flow: {}", lang, flowType.getValue());
             
+            // Get template name based on flow type
+            String templateName = getTemplateNameForFlow(flowType);
+            log.info("📋 Using template name: {} for flow: {}", templateName, flowType.getValue());
+            
+            // Try to get template from api_template_mapping table
+            ApiTemplateMapping apiTemplateMapping = null;
+            TemplateMessage templateConfig = null;
             try {
-                apiAssistantMapping = apiAssistantMappingRepository
-                    .findById(new ApiAssistantMappingId(flowType.getValue(), communicationMode)) 
+                apiTemplateMapping = apiTemplateMappingRepository
+                    .findByApiNameAndLangAndTemplateName(flowType.getValue(), lang, templateName)
                     .orElse(null);
                 
-                if (apiAssistantMapping != null) {
-                    templateConfig = parseTemplateFromDatabase(apiAssistantMapping.getTemplateMessage());
-                    log.info("✅ Found template in database for flow: {}", flowType.getValue());
+                if (apiTemplateMapping != null && apiTemplateMapping.isActive()) {
+                    templateConfig = parseTemplateFromDatabase(apiTemplateMapping.getTemplate());
+                    log.info("✅ Found active template in api_template_mapping for flow: {}, lang: {}, template: {}", 
+                        flowType.getValue(), lang, templateName);
+                } else if (apiTemplateMapping != null) {
+                    log.warn("⚠️ Found inactive template in api_template_mapping for flow: {}, lang: {}, template: {}", 
+                        flowType.getValue(), lang, templateName);
+                    apiTemplateMapping = null; // Treat inactive template as not found
                 } else {
-                    log.warn("⚠️ No database record found for flow: {}, using hardcoded template", flowType.getValue());
+                    log.warn("⚠️ No template found in api_template_mapping for flow: {}, lang: {}, template: {}", 
+                        flowType.getValue(), lang, templateName);
                 }
             } catch (Exception e) {
-                log.warn("⚠️ Database lookup failed for flow: {}, using hardcoded template: {}", flowType.getValue(), e.getMessage());
+                log.warn("⚠️ Database lookup failed for api_template_mapping, flow: {}, lang: {}, template: {} - Error: {}", 
+                    flowType.getValue(), lang, templateName, e.getMessage());
             }
             
-            // If no database template, use hardcoded template (this will work for all flows)
+            // Parse template from api_template_mapping
+           
             if (templateConfig == null) {
-                log.info("🔄 Using hardcoded template for flow: {}", flowType.getValue());
+                log.warn("No template config found for flow: {}, using fallback", flowType.getValue());
                 return createHardcodedTemplateMessage(request, flowType);
             }
             
-            // Use database template
-            log.info("📋 Using database template:");
+            // Use template from api_template_mapping table
+            log.info("📋 Using api_template_mapping template:");
             log.info("- Template Name: {}", templateConfig.getTemplateName());
             log.info("- Language: {}", templateConfig.getLanguage());
             log.info("- Driver: {}", request.getPhoneNumber());
             
             // Fill placeholders with actual data from request
-            List<String> placeholderValues = fillPlaceholders(templateConfig.getPlaceholders(), request,flowType);
+            List<String> placeholderValues = fillPlaceholders(templateConfig.getPlaceholders(), request, flowType);
             log.info("- Placeholder Values: {}", placeholderValues);
             
             // Convert buttons from config to WhatsApp buttons
             List<WhatsAppMessage.Button> buttons = convertButtons(templateConfig.getButtons());
             log.info("Buttons: {}", buttons);
             log.info("- Number of Buttons: {}", buttons.size());
+            
             // Build template message
             WhatsAppMessage.Body body = WhatsAppMessage.Body.builder()
                     .placeholders(placeholderValues)
@@ -1374,4 +1400,4 @@ public class OtrService {
                 return "Hello {0}! Update for Order {1}. ETA: {2}, Truck: {3}. Please respond with your status.";
         }
     }
-} 
+}

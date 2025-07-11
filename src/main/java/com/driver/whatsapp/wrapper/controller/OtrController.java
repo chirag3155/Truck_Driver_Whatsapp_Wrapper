@@ -123,6 +123,15 @@ public class OtrController {
                 .data(response)
                 .build());
 
+        } catch (IllegalArgumentException e) {
+            log.error("Validation error in {} flow generate request: {}", flowName, e.getMessage(), e);
+            
+            return ResponseEntity.ok(ApiGenericResponse.<FlowResponse>builder()
+                .status(400)
+                .message(e.getMessage())
+                .path("/wawrapper/" + flowName + "/generate")
+                .data(null)
+                .build());
         } catch (RuntimeException e) {
             log.error("Error processing {} flow generate request: {}", flowName, e.getMessage(), e);
             

@@ -56,6 +56,15 @@ public class OtrRequest {
 
     @JsonProperty("clientName")
     private String clientName;
+
+    @JsonProperty("assistantId")
+    private String assistantId;
+
+    @JsonProperty("tenantId")
+    private String tenantId;
+
+    @JsonProperty("lang")
+    private String lang;
     
     // These will be generated server-side
     // @JsonProperty("conversationId")
