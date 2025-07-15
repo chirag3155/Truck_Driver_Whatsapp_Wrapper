@@ -29,9 +29,9 @@ public class OtrController {
     private OtrService otrService;
 
     @Operation(
-        summary = "Generate Dynamic Flow Conversation",
-        description = "Creates a new conversation for any flow type (OTR, Loading Confirmation, Order Completion, Reminder, Status Follow-up), " +
-                     "saves transaction details, calls chat module for response generation, and sends message to driver via specified communication mode"
+        summary = "Generate Flow Conversation by Transaction ID",
+        description = "Validates existing transaction by transaction_id, retrieves flow_name from database, " +
+                     "and processes the flow conversation. Throws runtime exception if transaction_id doesn't exist."
     )
     @ApiResponses(value = {
         @ApiResponse(
@@ -44,10 +44,11 @@ public class OtrController {
                     {
                       "status": 200,
                       "message": "Flow request processed successfully",
-                      "path": "/wawrapper/otr/generate",
+                      "path": "/wawrapper/generate",
                       "timestamp": "2024-01-01T12:00:00",
                       "data": {
-                        "transactionId": "txn_123456"
+                        "transactionId": "txn_123456",
+                        "flowName": "OTR"
                       }
                     }
                     """
@@ -56,15 +57,15 @@ public class OtrController {
         ),
         @ApiResponse(
             responseCode = "400",
-            description = "Invalid flow request",
+            description = "Invalid request - missing or invalid transaction ID",
             content = @Content(
                 mediaType = "application/json",
                 examples = @ExampleObject(
                     value = """
                     {
                       "status": 400,
-                      "message": "Invalid flow type: INVALID_FLOW",
-                      "path": "/wawrapper/invalid/generate",
+                      "message": "Transaction ID is required in the request body",
+                      "path": "/wawrapper/generate",
                       "timestamp": "2024-01-01T12:00:00",
                       "data": null
                     }
@@ -74,15 +75,15 @@ public class OtrController {
         ),
         @ApiResponse(
             responseCode = "500",
-            description = "Internal server error",
+            description = "Transaction not found or internal server error",
             content = @Content(
                 mediaType = "application/json",
                 examples = @ExampleObject(
                     value = """
                     {
                       "status": 500,
-                      "message": "Failed to process flow request",
-                      "path": "/wawrapper/otr/generate",
+                      "message": "Transaction not found for transaction_id: txn_invalid_123",
+                      "path": "/wawrapper/generate",
                       "timestamp": "2024-01-01T12:00:00",
                       "data": null
                     }
@@ -91,64 +92,60 @@ public class OtrController {
             )
         )
     })
-    @PostMapping("/{flow_name}/generate")
+    @PostMapping("/generate")
     public ResponseEntity<ApiGenericResponse<FlowResponse>> generateFlow(
-        @PathVariable("flow_name") String flowName,
-        @RequestParam(value = "communication_mode", defaultValue = "whatsapp") String communicationMode,
         @Valid @RequestBody OtrRequest otrRequest) {
         try {
-            log.info("Received {} flow generate request for order: {}, truck: {}, phone: {}, communication_mode: {}", 
-                    flowName, otrRequest.getOrderNumber(), otrRequest.getTruckNumber(), otrRequest.getPhoneNumber(), communicationMode);
-
-            // Validate flow type
-            if (!FlowType.isValid(flowName)) {
-                log.error("Invalid flow type: {}", flowName);
+            // Validate transaction ID is provided
+            if (otrRequest.getTransactionId() == null || otrRequest.getTransactionId().trim().isEmpty()) {
+                log.error("Transaction ID is required");
                 return ResponseEntity.ok(ApiGenericResponse.<FlowResponse>builder()
                     .status(400)
-                    .message("Invalid flow type: " + flowName + ". Valid types: " + 
-                        String.join(", ", FlowType.LOADING_CONFIRMATION.getValue(), FlowType.ORDER_COMPLETION.getValue(), 
-                                   FlowType.OTR.getValue(), FlowType.REMINDER.getValue(), FlowType.STATUS_FOLLOW_UP.getValue()))
-                    .path("/wawrapper/" + flowName + "/generate")
+                    .message("Transaction ID is required in the request body")
+                    .path("/wawrapper/generate")
                     .data(null)
                     .build());
             }
 
-            // Process flow request
-            FlowResponse response = otrService.processFlowRequest(otrRequest, flowName, communicationMode);
+            String communicationMode = "whatsapp";
+            log.info("Received flow generate request for transaction_id: {}, order: {}, truck: {}, phone: {}, communication_mode: {}", 
+                    otrRequest.getTransactionId(), otrRequest.getOrderNumber(), otrRequest.getTruckNumber(), otrRequest.getPhoneNumber(), communicationMode);
+
+            // Process flow request (service will get flow_name from database using transaction_id)
+            FlowResponse response = otrService.processFlowRequestByTransactionId(otrRequest, communicationMode);
             
             return ResponseEntity.ok(ApiGenericResponse.<FlowResponse>builder()
                 .status(200)
                 .message("Flow request processed successfully")
-                .path("/wawrapper/" + flowName + "/generate")
+                .path("/wawrapper/generate")
                 .data(response)
                 .build());
 
         } catch (IllegalArgumentException e) {
-            log.error("Validation error in {} flow generate request: {}", flowName, e.getMessage(), e);
+            log.error("Validation error in flow generate request: {}", e.getMessage(), e);
             
             return ResponseEntity.ok(ApiGenericResponse.<FlowResponse>builder()
                 .status(400)
                 .message(e.getMessage())
-                .path("/wawrapper/" + flowName + "/generate")
+                .path("/wawrapper/generate")
                 .data(null)
                 .build());
         } catch (RuntimeException e) {
-            log.error("Error processing {} flow generate request: {}", flowName, e.getMessage(), e);
+            log.error("Runtime error processing flow generate request: {}", e.getMessage(), e);
             
             return ResponseEntity.ok(ApiGenericResponse.<FlowResponse>builder()
-                .status(200)
+                .status(400)
                 .message(e.getMessage())
-                .path("/wawrapper/" + flowName + "/generate")
+                .path("/wawrapper/generate")
                 .data(null)
                 .build());
-        } 
-        catch (Exception e) {
-            log.error("Error processing {} flow generate request: {}", flowName, e.getMessage(), e);
+        } catch (Exception e) {
+            log.error("Unexpected error processing flow generate request: {}", e.getMessage(), e);
             
             return ResponseEntity.ok(ApiGenericResponse.<FlowResponse>builder()
-                .status(500)
-                .message("Failed to process " + flowName + " request: " + e.getMessage())
-                .path("/wawrapper/" + flowName + "/generate")
+                .status(400)
+                .message("Failed to process flow request: " + e.getMessage())
+                .path("/wawrapper/generate")
                 .data(null)
                 .build());
         }

@@ -19,25 +19,25 @@ public interface TransactionDetailRepository extends JpaRepository<TransactionDe
     /**
      * Find transaction details by phone number
      */
-    @Query("SELECT td FROM TransactionDetail td WHERE td.id.phoneNumber = :phoneNumber")
+    @Query("SELECT td FROM TransactionDetail td WHERE td.phoneNumber = :phoneNumber")
     List<TransactionDetail> findByPhoneNumber(@Param("phoneNumber") String phoneNumber);
     
     /**
      * Find transaction details by order number
      */
-    @Query("SELECT td FROM TransactionDetail td WHERE td.id.orderNumber = :orderNumber")
+    @Query("SELECT td FROM TransactionDetail td WHERE td.orderNumber = :orderNumber")
     List<TransactionDetail> findByOrderNumber(@Param("orderNumber") String orderNumber);
     
     /**
      * Find transaction details by truck number
      */
-    @Query("SELECT td FROM TransactionDetail td WHERE td.id.truckNumber = :truckNumber")
+    @Query("SELECT td FROM TransactionDetail td WHERE td.truckNumber = :truckNumber")
     List<TransactionDetail> findByTruckNumber(@Param("truckNumber") String truckNumber);
     
     /**
      * Find transaction details by transaction ID
      */
-    @Query("SELECT td FROM TransactionDetail td WHERE td.id.transactionId = :transactionId")
+    @Query("SELECT td FROM TransactionDetail td WHERE td.transactionId = :transactionId")
     Optional<TransactionDetail> findByTransactionId(@Param("transactionId") String transactionId);
     
     /**
@@ -61,7 +61,7 @@ public interface TransactionDetailRepository extends JpaRepository<TransactionDe
     /**
      * Check if transaction exists for given phone number and order number
      */
-    @Query("SELECT COUNT(td) > 0 FROM TransactionDetail td WHERE td.id.phoneNumber = :phoneNumber AND td.id.orderNumber = :orderNumber")
+    @Query("SELECT COUNT(td) > 0 FROM TransactionDetail td WHERE td.phoneNumber = :phoneNumber AND td.orderNumber = :orderNumber")
     boolean existsByPhoneNumberAndOrderNumber(@Param("phoneNumber") String phoneNumber, @Param("orderNumber") String orderNumber);
     
     /**
@@ -82,19 +82,19 @@ public interface TransactionDetailRepository extends JpaRepository<TransactionDe
      */
     @Modifying
     @Transactional
-    @Query("UPDATE TransactionDetail td SET td.state = 'closed' WHERE td.id.phoneNumber = :phoneNumber AND td.ConversationId != :conversationId")
+    @Query("UPDATE TransactionDetail td SET td.state = 'closed' WHERE td.phoneNumber = :phoneNumber AND td.conversationId != :conversationId")
     int closeAllOtherTransactions(@Param("phoneNumber") String phoneNumber, @Param("conversationId") String conversationId);
 
     /**
      * Find open conversations by driver phone number
      */
-    @Query("SELECT td FROM TransactionDetail td WHERE td.id.phoneNumber = :phoneNumber AND td.state = 'open'")
+    @Query("SELECT td FROM TransactionDetail td WHERE td.phoneNumber = :phoneNumber AND td.state = 'open'")
     List<TransactionDetail> findOpenConversationsByPhoneNumber(@Param("phoneNumber") String phoneNumber);
 
     /**
      * Find the most recent open conversation by driver phone number
      */
-    @Query("SELECT td FROM TransactionDetail td WHERE td.id.phoneNumber = :phoneNumber AND td.state = 'open' ORDER BY td.transactionTimestamp DESC")
+    @Query("SELECT td FROM TransactionDetail td WHERE td.phoneNumber = :phoneNumber AND td.state = 'open' ORDER BY td.transactionTimestamp DESC")
     Optional<TransactionDetail> findMostRecentOpenConversation(@Param("phoneNumber") String phoneNumber);
 
     /**
@@ -108,7 +108,7 @@ public interface TransactionDetailRepository extends JpaRepository<TransactionDe
      */
     @Modifying
     @Transactional
-    @Query("UPDATE TransactionDetail td SET td.state = 'closed', td.updatedTimestamp = :updatedTime WHERE td.id.phoneNumber = :phoneNumber AND td.ConversationId = :conversationId")
+    @Query("UPDATE TransactionDetail td SET td.state = 'closed', td.updatedTimestamp = :updatedTime WHERE td.phoneNumber = :phoneNumber AND td.conversationId = :conversationId")
     int closeConversation(@Param("phoneNumber") String phoneNumber, @Param("conversationId") String conversationId, @Param("updatedTime") LocalDateTime updatedTime);
 
     /**
@@ -116,7 +116,7 @@ public interface TransactionDetailRepository extends JpaRepository<TransactionDe
      */
     @Modifying
     @Transactional
-    @Query("UPDATE TransactionDetail td SET td.state = 'closed', td.updatedTimestamp = :updatedTime WHERE td.id.phoneNumber = :phoneNumber AND td.state = 'open'")
+    @Query("UPDATE TransactionDetail td SET td.state = 'closed', td.updatedTimestamp = :updatedTime WHERE td.phoneNumber = :phoneNumber AND td.state = 'open'")
     int closeAllOpenConversations(@Param("phoneNumber") String phoneNumber, @Param("updatedTime") LocalDateTime updatedTime);
 
     /**
@@ -124,13 +124,13 @@ public interface TransactionDetailRepository extends JpaRepository<TransactionDe
      */
     @Modifying
     @Transactional
-    @Query("UPDATE TransactionDetail td SET td.updatedTimestamp = :updatedTime WHERE td.id.phoneNumber = :phoneNumber AND td.ConversationId = :conversationId")
+    @Query("UPDATE TransactionDetail td SET td.updatedTimestamp = :updatedTime WHERE td.phoneNumber = :phoneNumber AND td.conversationId = :conversationId")
     int updateConversationActivity(@Param("phoneNumber") String phoneNumber, @Param("conversationId") String conversationId, @Param("updatedTime") LocalDateTime updatedTime);
 
     /**
      * Find conversation by conversation ID
      */
-    @Query("SELECT td FROM TransactionDetail td WHERE td.ConversationId = :conversationId")
+    @Query("SELECT td FROM TransactionDetail td WHERE td.conversationId = :conversationId")
     Optional<TransactionDetail> findByConversationId(@Param("conversationId") String conversationId);
 
     /**
@@ -142,6 +142,6 @@ public interface TransactionDetailRepository extends JpaRepository<TransactionDe
     /**
      * Find transaction by transactionId and phoneNumber
      */
-    @Query("SELECT td FROM TransactionDetail td WHERE td.id.transactionId = :transactionId AND td.id.phoneNumber = :phoneNumber")
+    @Query("SELECT td FROM TransactionDetail td WHERE td.transactionId = :transactionId AND td.phoneNumber = :phoneNumber")
     Optional<TransactionDetail> findByTransactionIdAndPhoneNumber(@Param("transactionId") String transactionId, @Param("phoneNumber") String phoneNumber);
 } 

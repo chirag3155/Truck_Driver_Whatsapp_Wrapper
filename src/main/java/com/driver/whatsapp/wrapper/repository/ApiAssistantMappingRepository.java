@@ -16,19 +16,19 @@ public interface ApiAssistantMappingRepository extends JpaRepository<ApiAssistan
     /**
      * Find mapping by API name and communication mode
      */
-    @Query("SELECT am FROM ApiAssistantMapping am WHERE am.id.apiName = :apiName AND am.id.communicationMode = :communicationMode")
+    @Query("SELECT am FROM ApiAssistantMapping am WHERE am.apiName = :apiName AND am.communicationMode = :communicationMode")
     Optional<ApiAssistantMapping> findByApiNameAndCommunicationMode(@Param("apiName") String apiName, @Param("communicationMode") String communicationMode);
     
     /**
      * Find all mappings for a specific API name
      */
-    @Query("SELECT am FROM ApiAssistantMapping am WHERE am.id.apiName = :apiName")
+    @Query("SELECT am FROM ApiAssistantMapping am WHERE am.apiName = :apiName")
     List<ApiAssistantMapping> findByApiName(@Param("apiName") String apiName);
     
     /**
      * Find all mappings for a specific communication mode
      */
-    @Query("SELECT am FROM ApiAssistantMapping am WHERE am.id.communicationMode = :communicationMode")
+    @Query("SELECT am FROM ApiAssistantMapping am WHERE am.communicationMode = :communicationMode")
     List<ApiAssistantMapping> findByCommunicationMode(@Param("communicationMode") String communicationMode);
     
     /**

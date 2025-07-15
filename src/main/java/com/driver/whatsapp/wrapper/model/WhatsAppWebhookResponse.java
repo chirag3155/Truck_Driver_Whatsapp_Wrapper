@@ -64,8 +64,23 @@ public class WhatsAppWebhookResponse {
         @JsonProperty("text")
         private String text;
         
+        @JsonProperty("url")
+        private String url;
+
+        @JsonProperty("caption") 
+        private String caption;
+        
         @JsonProperty("type")
         private String type;
+        
+        // Explicit getters for document fields
+        public String getUrl() {
+            return url;
+        }
+        
+        public String getCaption() {
+            return caption;
+        }
     }
     
     @Data

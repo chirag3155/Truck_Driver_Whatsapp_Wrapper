@@ -23,6 +23,7 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Random;
 
 import com.driver.whatsapp.wrapper.utils.DateTimeFormatUtil;
@@ -59,7 +60,82 @@ public class OtrService {
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     /**
+     * Process flow request by looking up transaction ID in database
+     * Gets flow_name from existing transaction record
+     */
+    public FlowResponse processFlowRequestByTransactionId(OtrRequest request, String communicationMode) {
+        try {
+            String transactionId = request.getTransactionId();
+            
+            // Find existing transaction by transaction ID
+            TransactionDetail existingTransaction = findTransactionByTransactionId(transactionId);
+            
+            // Validate transaction exists
+            if (existingTransaction == null) {
+                String errorMsg = "Transaction not found for transaction_id: " + transactionId;
+                log.error("❌ {}", errorMsg);
+                throw new RuntimeException(errorMsg);
+            }
+            
+            // Get flow_name from existing transaction
+            String flowName = existingTransaction.getFlowName();
+            if (flowName == null || flowName.trim().isEmpty()) {
+                String errorMsg = "Flow name is null or empty for transaction_id: " + transactionId;
+                log.error("❌ {}", errorMsg);
+                throw new RuntimeException(errorMsg);
+            }
+            if(request.getConversationId() == null || request.getConversationId().trim().isEmpty()) 
+            
+            {
+                throw new RuntimeException("Conversation ID is required in the request");
+            }
+            if(!request.getConversationId().equals(existingTransaction.getConversationId())) {
+                throw new RuntimeException("Conversation ID does not match the existing transaction");
+            }
+            log.info("✅ Found existing transaction with flow_name: {} for transaction_id: {}", flowName, transactionId);
+            
+            // Continue with the existing flow processing logic
+            return processFlowRequest(request, flowName, communicationMode);
+            
+        } catch (RuntimeException e) {
+            log.error("❌ Runtime error in processFlowRequestByTransactionId: {}", e.getMessage());
+            throw e; // Re-throw runtime exceptions
+        } catch (Exception e) {
+            log.error("❌ Unexpected error in processFlowRequestByTransactionId: {}", e.getMessage(), e);
+            throw new RuntimeException("Failed to process flow request: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Find transaction by transaction ID using efficient database query
+     */
+    private TransactionDetail findTransactionByTransactionId(String transactionId) {
+        try {
+            log.info("🔍 Looking up transaction by transaction_id: {}", transactionId);
+            
+            // Use efficient repository query to find transaction by transaction_id
+            Optional<TransactionDetail> transactionOpt = transactionDetailRepository.findByTransactionId(transactionId);
+            
+            if (transactionOpt.isPresent()) {
+                TransactionDetail transaction = transactionOpt.get();
+                log.info("✅ Found transaction: truck={}, order={}, phone={}, flow_name={}", 
+                    transaction.getTruckNumber(), transaction.getOrderNumber(), 
+                    transaction.getPhoneNumber(), transaction.getFlowName());
+                return transaction;
+            } else {
+                log.warn("⚠️ No transaction found with transaction_id: {}", transactionId);
+                return null;
+            }
+            
+        } catch (Exception e) {
+            log.error("❌ Error finding transaction by transaction_id {}: {}", transactionId, e.getMessage(), e);
+            throw new RuntimeException("Database error while finding transaction: " + e.getMessage(), e);
+        }
+    }
+
+    /**
      * Process dynamic flow request (OTR, Loading Confirmation, etc.)
+     * Original method - now used internally after getting flow_name from database
      */
     public FlowResponse processFlowRequest(OtrRequest request, String flowName, String communicationMode) {
         try {
@@ -71,8 +147,8 @@ public class OtrService {
             FlowType flowType = FlowType.fromValue(flowName);
             
             // Generate conversation ID and transaction ID
-            String conversationId = generateConversationId();
-            String transactionId = generateTransactionId();
+            String conversationId = request.getConversationId();
+            String transactionId = request.getTransactionId();
 
             // Get tenantId and assistantId from the request
             String tenantId = request.getTenantId();
@@ -86,20 +162,6 @@ public class OtrService {
                 throw new IllegalArgumentException("assistantId is required in the request");
             }
             
-            // Create and save transaction detail
-            TransactionDetail transactionDetail = createTransactionDetail(request, transactionId, conversationId, communicationMode);
-            transactionDetail.setFlowName(flowName);
-            transactionDetailRepository.save(transactionDetail);
-            log.info("Transaction detail saved for flow: {}, conversation ID: {}, transaction ID: {}", flowName, conversationId, transactionId);
-            
-            // Close all other transactions, keep only this one as "open"
-            closeAllOtherTransactions(request.getPhoneNumber(), conversationId);
-            
-            // Send request to chat module to generate response (for logging purposes only)
-            String chatResponse = callChatModule(request, tenantId, assistantId, transactionId, conversationId, flowType);
-            log.info("Chat module response received for flow: {}, conversation ID: {}", flowName, conversationId);
-            log.info("Chat module response content: {}", chatResponse);
-            
             // Create template message from database (this is what will be sent to driver)
             List<WhatsAppMessage.Message> templateMessages = createTemplateMessageFromDatabase(request, flowType, communicationMode);
             log.info("Template messages: {}", templateMessages);
@@ -107,6 +169,17 @@ public class OtrService {
             // Log and extract template message content for response
             String templateMessageContent = extractAndLogTemplateContent(templateMessages, flowType);
             log.info("Template message content: {}", templateMessageContent);
+            // Transaction existence has already been verified by findTransactionByTransactionId
+            
+            // Close all other transactions, keep only this one as "open"
+            // closeAllOtherTransactions(request.getPhoneNumber(), conversationId);
+            
+            // Send request to chat module to generate response (for logging purposes only)
+            String chatResponse = callChatModule(request, tenantId, assistantId, transactionId, conversationId, flowType);
+            log.info("Chat module response received for flow: {}, conversation ID: {}", flowName, conversationId);
+            log.info("Chat module response content: {}", chatResponse);
+            
+            
             
             // Send the database template message to driver (not chat module response)
             Map<String, Object> sendResult = sendTemplateMessage(templateMessages);
@@ -114,8 +187,8 @@ public class OtrService {
             
             // Update status code based on success/failure
             String statusCode = messageSent ? "MESSAGE_SENT" : "MESSAGE_FAILED";
-            transactionDetail.setStatusCode(statusCode);
-            transactionDetailRepository.save(transactionDetail);
+            // transactionDetail.setStatusCode(statusCode);
+            // transactionDetailRepository.save(transactionDetail);
             
             if (!messageSent) {
                 throw new RuntimeException("Failed to send " + flowName + " message: " + sendResult.get("message"));
@@ -195,97 +268,23 @@ public class OtrService {
     }
     
     /**
-     * Create TransactionDetail entity from OTR request
-     * Since transactionId is always unique, we should ALWAYS create new records
-     * Added state management: new transaction = "open", others = "closed"
-     */
-    private TransactionDetail createTransactionDetail(OtrRequest request, String transactionId, String conversationId, String communicationMode) {
-        
-        log.info("🔍 DEBUG: Creating transaction detail with NEW transactionId: {}", transactionId);
-        log.info("🔍 DEBUG: Composite key will be: truck={}, order={}, phone={}, transactionId={}", 
-            request.getTruckNumber(), request.getOrderNumber(), request.getPhoneNumber(), transactionId);
-        
-        TransactionDetailId id = TransactionDetailId.builder()
-                .truckNumber(request.getTruckNumber())
-                .orderNumber(request.getOrderNumber())
-                .phoneNumber(request.getPhoneNumber())
-                .transactionId(transactionId)
-                .build();
-        
-        log.info("🔍 DEBUG: Built composite key: {}", id);
-        
-        // Since transactionId is unique, we should ALWAYS create new records
-        // But let's keep the check for debugging purposes
-        TransactionDetail existingDetail = transactionDetailRepository.findById(id).orElse(null);
-        
-        if (existingDetail != null) {
-            log.error("❌ UNEXPECTED: Found existing record with NEW transactionId: {}", transactionId);
-            log.error("❌ This should NEVER happen! Existing record: {}", existingDetail);
-            log.error("❌ Existing record transaction ID: {}", existingDetail.getTransactionId());
-            
-            // This should never happen, but if it does, update the existing record
-            existingDetail.setDriverName(request.getDriverName() != null ? request.getDriverName() : "");
-            existingDetail.setDropOffLocation(request.getDropOffLocation());
-            existingDetail.setPickUpLocation(request.getPickUpLocation());
-            existingDetail.setCommodity(request.getCommodity());
-            existingDetail.setOrderDate(request.getOrderDate());
-            existingDetail.setEtaTime(request.getEta());
-            existingDetail.setUniqueId(request.getUniqueId());
-            existingDetail.setTripId(request.getTripId());
-            existingDetail.setConversationId(conversationId);
-            existingDetail.setStatusCode("PENDING");
-            existingDetail.setCommunicationMode(communicationMode);
-            existingDetail.setUpdatedTimestamp(LocalDateTime.now());
-            existingDetail.setState("open"); // ✅ Set this transaction as OPEN
-            
-            return existingDetail;
-        } else {
-            log.info("✅ EXPECTED: No existing record found with transactionId: {}", transactionId);
-            log.info("✅ Creating NEW transaction record as expected");
-            
-            // Create new record (this should ALWAYS happen)
-            TransactionDetail newDetail = TransactionDetail.builder()
-                .id(id)
-                .driverName(request.getDriverName() != null ? request.getDriverName() : "")
-                .dropOffLocation(request.getDropOffLocation())
-                .pickUpLocation(request.getPickUpLocation())
-                .commodity(request.getCommodity())
-                .orderDate(request.getOrderDate())
-                .etaTime(request.getEta())
-                .uniqueId(request.getUniqueId())
-                .tripId(request.getTripId())
-                .ConversationId(conversationId)
-                .statusCode("PENDING")
-                .communicationMode(communicationMode)
-                .transactionTimestamp(LocalDateTime.now())
-                .state("open") // ✅ Set this new transaction as OPEN
-                .build();
-            
-            log.info("✅ Creating new transaction with OPEN state: truck={}, order={}, phone={}, transactionId={}", 
-                request.getTruckNumber(), request.getOrderNumber(), request.getPhoneNumber(), transactionId);
-            
-            return newDetail;
-        }
-    }
-    
-    /**
      * Close all other transactions when opening a new one
      * This ensures only one transaction is "open" at a time
      */
-    private void closeAllOtherTransactions(String phoneNumber, String conversationId) {
-        try {
-            log.info("🔄 Closing all other transactions for conversation: phone={}, conversationId={}", 
-                phoneNumber, conversationId);
-            // Update all transactions to "closed" except the current one
-            int updatedCount = transactionDetailRepository.closeAllOtherTransactions(phoneNumber, conversationId);
+    // private void closeAllOtherTransactions(String phoneNumber, String conversationId) {
+    //     try {
+    //         log.info("🔄 Closing all other transactions for conversation: phone={}, conversationId={}", 
+    //             phoneNumber, conversationId);
+    //         // Update all transactions to "closed" except the current one
+    //         int updatedCount = transactionDetailRepository.closeAllOtherTransactions(phoneNumber, conversationId);
             
-            log.info("✅ Successfully closed {} other transactions", updatedCount);
+    //         log.info("✅ Successfully closed {} other transactions", updatedCount);
             
-        } catch (Exception e) {
-            log.error("❌ Error closing other transactions: {}", e.getMessage(), e);
-            // Don't throw exception - this is not critical for the main flow
-        }
-    }
+    //     } catch (Exception e) {
+    //         log.error("❌ Error closing other transactions: {}", e.getMessage(), e);
+    //         // Don't throw exception - this is not critical for the main flow
+    //     }
+    // }
     
     /**
      * Call chat module to generate response
@@ -342,9 +341,9 @@ public class OtrService {
                     request.getPickUpLocation(),
                     request.getCommodity()
                 );
-            case ORDER_COMPLETION:
+            case DOC_REMINDER:
                 return String.format(
-                    "Order Completion - Order: %s, Truck: %s, Delivered to: %s, Commodity: %s",
+                    "Document Reminder - Order: %s, Truck: %s, Delivered to: %s, Commodity: %s",
                     request.getOrderNumber(),
                     request.getTruckNumber(),
                     request.getDropOffLocation(),
@@ -387,8 +386,8 @@ public class OtrService {
             case LOADING_CONFIRMATION:
                 return "Loading confirmation for Order: " + request.getOrderNumber() + 
                        ", Truck: " + request.getTruckNumber() + " at " + request.getPickUpLocation() + ". Thank you!";
-            case ORDER_COMPLETION:
-                return "Order completed successfully! Order: " + request.getOrderNumber() + 
+            case DOC_REMINDER:
+                return "Document reminder for Order: " + request.getOrderNumber() + 
                        ", Truck: " + request.getTruckNumber() + " delivered to " + request.getDropOffLocation() + ". Thank you!";
             case REMINDER:
                 return "Reminder: Order " + request.getOrderNumber() + " for Truck " + request.getTruckNumber() + 
@@ -449,16 +448,26 @@ public class OtrService {
             // Get template name based on flow type
             String templateName = getTemplateNameForFlow(flowType);
             
-            // Try to get template from api_template_mapping table
+            // Get template from database - throw exception if not found
             ApiTemplateMapping apiTemplateMapping = apiTemplateMappingRepository
                 .findByApiNameAndLangAndTemplateName(flowType.getValue(), lang, templateName)
-                .orElseThrow(() -> new RuntimeException("No template found in api_template_mapping for flow: " + flowType.getValue() + " and lang: " + lang + " and template: " + templateName));
+                .orElseThrow(() -> new RuntimeException(
+                    String.format("Template not found in database for flow: %s, lang: %s, template: %s", 
+                        flowType.getValue(), lang, templateName)));
             
-            // Parse template from database
+            // Check if template is active
+            if (!apiTemplateMapping.isActive()) {
+                throw new RuntimeException(
+                    String.format("Template is inactive in database for flow: %s, lang: %s, template: %s", 
+                        flowType.getValue(), lang, templateName));
+            }
+            
+            // Parse template JSON - throw exception if invalid
             TemplateMessage templateConfig = parseTemplateFromDatabase(apiTemplateMapping.getTemplate());
             if (templateConfig == null) {
-                log.warn("No template config found for flow: {}, using fallback", flowType.getValue());
-                return createFallbackTemplateMessage(request, flowType);
+                throw new RuntimeException(
+                    String.format("Invalid template JSON in database for flow: %s, lang: %s, template: %s", 
+                        flowType.getValue(), lang, templateName));
             }
             
             // Fill placeholders with actual data
@@ -494,7 +503,7 @@ public class OtrService {
             
         } catch (Exception e) {
             log.error("Error creating template message from api_template_mapping: {}", e.getMessage(), e);
-            return createFallbackTemplateMessage(request, flowType);
+            throw new RuntimeException("Failed to create template message for flow: " + flowType.getValue() + " - " + e.getMessage(), e);
         }
     }
     
@@ -539,8 +548,8 @@ public class OtrService {
                 return getOtrPlaceholderValue(key, request);
             case LOADING_CONFIRMATION:
                 return getLoadingConfirmationPlaceholderValue(key, request);
-            case ORDER_COMPLETION:
-                return getOrderCompletionPlaceholderValue(key, request);
+            case DOC_REMINDER:
+                return getDocReminderPlaceholderValue(key, request);
             case REMINDER:
                 return getReminderPlaceholderValue(key, request);
             case STATUS_FOLLOW_UP:
@@ -610,7 +619,7 @@ public class OtrService {
         }
     }
 
-    private String getOrderCompletionPlaceholderValue(String key, OtrRequest request) {
+    private String getDocReminderPlaceholderValue(String key, OtrRequest request) {
         switch (key.toLowerCase()) {
             case "vendorname":
                 return request.getDriverName() != null ? request.getDriverName() : "Driver";
@@ -698,39 +707,7 @@ public class OtrService {
         return buttons;
     }
     
-    /**
-     * Create fallback template message if database template is not available
-     */
-    private List<WhatsAppMessage.Message> createFallbackTemplateMessage(OtrRequest request, FlowType flowType) {
-        // Use the old hardcoded method as fallback
-        String templateName = getTemplateNameForFlow(flowType);
-        List<String> placeholders = getPlaceholdersForFlow(request, flowType);
-        List<WhatsAppMessage.Button> buttons = getButtonsForFlow(flowType);
-        
-        WhatsAppMessage.Body body = WhatsAppMessage.Body.builder()
-                .placeholders(placeholders)
-                .build();
 
-        WhatsAppMessage.TemplateData templateData = WhatsAppMessage.TemplateData.builder()
-                .body(body)
-                .buttons(buttons)
-                .build();
-
-        WhatsAppMessage.Content content = WhatsAppMessage.Content.builder()
-                .templateName(templateName)
-                .templateData(templateData)
-                .language("en")
-                .build();
-
-        WhatsAppMessage.Message message = WhatsAppMessage.Message.builder()
-                .from(whatsappFromNumber)
-                .to(request.getPhoneNumber())
-                .messageId(generateMessageId())
-                .content(content)
-                .build();
-
-        return Arrays.asList(message);
-    }
     
     /**
      * Get template name based on flow type
@@ -741,7 +718,7 @@ public class OtrService {
                 return "ai_otr_en";
             case LOADING_CONFIRMATION:
                 return "ai_loading_confirmation";
-            case ORDER_COMPLETION:
+            case DOC_REMINDER:
                 return "ai_pod_reminder";
             case REMINDER:
                 return "ai_reminder_en";
@@ -752,153 +729,9 @@ public class OtrService {
         }
     }
     
-    /**
-     * Get placeholders based on flow type and request data
-     */
-    private List<String> getPlaceholdersForFlow(OtrRequest request, FlowType flowType) {
-        switch (flowType) {
-            case OTR:
-                String formattedOrderDate = "scheduled time";
-                String formattedEtaTime = "scheduled time";
-                
-                if (request.getOrderDate() != null) {
-                    formattedOrderDate = dateTimeFormatUtil.formatOrderDate(request.getOrderDate());
-                    log.info("🔍 DEBUG - getPlaceholdersForFlow Order Date: {} -> Formatted: {}", request.getOrderDate(), formattedOrderDate);
-                }
-                
-                if (request.getEta() != null) {
-                    formattedEtaTime = dateTimeFormatUtil.formatEtaTime(request.getEta());
-                    log.info("🔍 DEBUG - getPlaceholdersForFlow ETA: {} -> Formatted: {}", request.getEta(), formattedEtaTime);
-                }
-                
-                return Arrays.asList(
-                    request.getDriverName() != null ? request.getDriverName() : "Driver",
-                    request.getTruckNumber(),     
-                    request.getPickUpLocation(),
-                    request.getDropOffLocation(),
-                    request.getClientName(),   
-                    formattedOrderDate,
-                    formattedEtaTime
-                );
-            case LOADING_CONFIRMATION:
-                return Arrays.asList(
-                    request.getDriverName() != null ? request.getDriverName() : "Driver",
-                    request.getPickUpLocation(),
-                    request.getCommodity() != null ? request.getCommodity() : "Cargo",
-                    request.getOrderNumber()
-                );
-            case ORDER_COMPLETION:
-                return Arrays.asList(
-                    request.getDriverName() != null ? request.getDriverName() : "Driver",
-                    request.getDropOffLocation(),
-                    request.getOrderNumber(),
-                    request.getTruckNumber()
-                );
-            case REMINDER:
-                return Arrays.asList(
-                    request.getDriverName() != null ? request.getDriverName() : "Driver",
-                    request.getOrderNumber(),
-                    request.getEta() != null ? dateTimeFormatUtil.formatEtaTime(request.getEta().toString()) : "scheduled time",
-                    request.getTruckNumber()
-                );
-            case STATUS_FOLLOW_UP:
-                return Arrays.asList(
-                    request.getDriverName() != null ? request.getDriverName() : "Driver",
-                    request.getOrderNumber(),
-                    request.getTruckNumber(),
-                    "Status Update"
-                );
-            default:
-                return Arrays.asList(
-                    request.getDriverName() != null ? request.getDriverName() : "Driver",
-                    request.getPickUpLocation(),
-                    request.getDropOffLocation(),
-                    request.getEta() != null ? dateTimeFormatUtil.formatEtaTime(request.getEta().toString()) : "scheduled time"
-                );
-        }
-    }
+
     
-    /**
-     * Get buttons based on flow type
-     */
-    private List<WhatsAppMessage.Button> getButtonsForFlow(FlowType flowType) {
-        switch (flowType) {
-            case OTR:
-            return Arrays.asList(
-                WhatsAppMessage.Button.builder()
-                    .type("QUICK_REPLY")
-                    .parameter("Yes, On Time")
-                    .build(),
-                WhatsAppMessage.Button.builder()
-                    .type("QUICK_REPLY")
-                    .parameter("No, There is a Delay")
-                    .build(),
-                WhatsAppMessage.Button.builder()
-                    .type("QUICK_REPLY")
-                    .parameter("Not loading this trip")
-                    .build(),
-                WhatsAppMessage.Button.builder()
-                    .type("URL")
-                    .parameter("https://trukker.com/partner") // Update with actual URL
-                    .build()
-                );
-            case LOADING_CONFIRMATION:
-                return Arrays.asList(
-                    WhatsAppMessage.Button.builder()
-                        .type("QUICK_REPLY")
-                        .parameter("Loading Started")
-                        .build(),
-                    WhatsAppMessage.Button.builder()
-                        .type("QUICK_REPLY")
-                        .parameter("Loading Completed")
-                        .build()
-                );
-            case ORDER_COMPLETION:
-                return Arrays.asList(
-                    WhatsAppMessage.Button.builder()
-                        .type("QUICK_REPLY")
-                        .parameter("Order Delivered")
-                        .build(),
-                    WhatsAppMessage.Button.builder()
-                        .type("QUICK_REPLY")
-                        .parameter("Issue with Delivery")
-                        .build()
-                );
-            case REMINDER:
-                return Arrays.asList(
-                    WhatsAppMessage.Button.builder()
-                        .type("QUICK_REPLY")
-                        .parameter("On Schedule")
-                        .build(),
-                    WhatsAppMessage.Button.builder()
-                        .type("QUICK_REPLY")
-                        .parameter("Delayed")
-                        .build()
-                );
-            case STATUS_FOLLOW_UP:
-                return Arrays.asList(
-                    WhatsAppMessage.Button.builder()
-                        .type("QUICK_REPLY")
-                        .parameter("Update Status")
-                        .build(),
-                    WhatsAppMessage.Button.builder()
-                        .type("QUICK_REPLY")
-                        .parameter("Call Me")
-                        .build()
-                );
-            default:
-                return Arrays.asList(
-                    WhatsAppMessage.Button.builder()
-                        .type("QUICK_REPLY")
-                        .parameter("Confirm")
-                        .build(),
-                    WhatsAppMessage.Button.builder()
-                        .type("QUICK_REPLY")
-                        .parameter("Need Help")
-                        .build()
-                );
-        }
-    }
+
     
     /**
      * Generate message ID for template messages
@@ -923,37 +756,30 @@ public class OtrService {
             String templateName = getTemplateNameForFlow(flowType);
             log.info("📋 Using template name: {} for flow: {}", templateName, flowType.getValue());
             
-            // Try to get template from api_template_mapping table
-            ApiTemplateMapping apiTemplateMapping = null;
-            TemplateMessage templateConfig = null;
-            try {
-                apiTemplateMapping = apiTemplateMappingRepository
-                    .findByApiNameAndLangAndTemplateName(flowType.getValue(), lang, templateName)
-                    .orElse(null);
-                
-                if (apiTemplateMapping != null && apiTemplateMapping.isActive()) {
-                    templateConfig = parseTemplateFromDatabase(apiTemplateMapping.getTemplate());
-                    log.info("✅ Found active template in api_template_mapping for flow: {}, lang: {}, template: {}", 
-                        flowType.getValue(), lang, templateName);
-                } else if (apiTemplateMapping != null) {
-                    log.warn("⚠️ Found inactive template in api_template_mapping for flow: {}, lang: {}, template: {}", 
-                        flowType.getValue(), lang, templateName);
-                    apiTemplateMapping = null; // Treat inactive template as not found
-                } else {
-                    log.warn("⚠️ No template found in api_template_mapping for flow: {}, lang: {}, template: {}", 
-                        flowType.getValue(), lang, templateName);
-                }
-            } catch (Exception e) {
-                log.warn("⚠️ Database lookup failed for api_template_mapping, flow: {}, lang: {}, template: {} - Error: {}", 
-                    flowType.getValue(), lang, templateName, e.getMessage());
+            // Get template from database - throw exception if not found
+            ApiTemplateMapping apiTemplateMapping = apiTemplateMappingRepository
+                .findByApiNameAndLangAndTemplateName(flowType.getValue(), lang, templateName)
+                .orElseThrow(() -> new RuntimeException(
+                    String.format("Template not found in database for flow: %s, lang: %s, template: %s", 
+                        flowType.getValue(), lang, templateName)));
+            
+            // Check if template is active
+            if (!apiTemplateMapping.isActive()) {
+                throw new RuntimeException(
+                    String.format("Template is inactive in database for flow: %s, lang: %s, template: %s", 
+                        flowType.getValue(), lang, templateName));
             }
             
-            // Parse template from api_template_mapping
-           
+            // Parse template JSON - throw exception if invalid
+            TemplateMessage templateConfig = parseTemplateFromDatabase(apiTemplateMapping.getTemplate());
             if (templateConfig == null) {
-                log.warn("No template config found for flow: {}, using fallback", flowType.getValue());
-                return createHardcodedTemplateMessage(request, flowType);
+                throw new RuntimeException(
+                    String.format("Invalid template JSON in database for flow: %s, lang: %s, template: %s", 
+                        flowType.getValue(), lang, templateName));
             }
+            
+            log.info("✅ Using template from database for flow: {}, lang: {}, template: {}", 
+                flowType.getValue(), lang, templateName);
             
             // Use template from api_template_mapping table
             log.info("📋 Using api_template_mapping template:");
@@ -998,63 +824,11 @@ public class OtrService {
             
         } catch (Exception e) {
             log.error("❌ Error creating template message: {}", e.getMessage(), e);
-            log.info("🔄 Falling back to hardcoded template for flow: {}", flowType.getValue());
-            return createHardcodedTemplateMessage(request, flowType);
+            throw new RuntimeException("Failed to create template message for flow: " + flowType.getValue() + " - " + e.getMessage(), e);
         }
     }
     
-    /**
-     * Create hardcoded template message that works for ALL flows
-     * Uses ONLY /whatsapp/1/message/template API with flow-specific content
-     */
-    private List<WhatsAppMessage.Message> createHardcodedTemplateMessage(OtrRequest request, FlowType flowType) {
-        try {
-            log.info("🔨 Creating template message for flow: {}", flowType.getValue());
-            
-            // Always use same template name but with flow-specific placeholders
-            String templateName = getTemplateNameForFlow(flowType);
-            List<String> placeholders = getPlaceholdersForFlow(request, flowType);
-            List<WhatsAppMessage.Button> buttons = getButtonsForFlow(flowType);
-            
-            log.info("📋 Template message details:");
-            log.info("- Template Name: {}", templateName);
-            log.info("- Flow Type: {}", flowType.getValue());
-            log.info("- Placeholders: {}", placeholders);
-            log.info("- Buttons: {}", buttons.size());
-            
-            // Build template message structure
-            WhatsAppMessage.Body body = WhatsAppMessage.Body.builder()
-                    .placeholders(placeholders)
-                    .build();
 
-            WhatsAppMessage.TemplateData templateData = WhatsAppMessage.TemplateData.builder()
-                    .body(body)
-                    .buttons(buttons)
-                    .build();
-
-            WhatsAppMessage.Content content = WhatsAppMessage.Content.builder()
-                    .templateName(templateName)
-                    .templateData(templateData)
-                    .language("en")
-                    .build();
-
-            WhatsAppMessage.Message message = WhatsAppMessage.Message.builder()
-                    .from(whatsappFromNumber)
-                    .to(request.getPhoneNumber())
-                    .messageId(generateMessageId())
-                    .content(content)
-                    .build();
-
-            log.info("✅ Template message created for flow: {} using template: {}", 
-                flowType.getValue(), templateName);
-            
-            return Arrays.asList(message);
-            
-        } catch (Exception e) {
-            log.error("❌ Error creating template message: {}", e.getMessage(), e);
-            throw new RuntimeException("Failed to create template message for flow: " + flowType.getValue(), e);
-        }
-    }
     
     /**
      * Send message to driver via WhatsApp service
@@ -1321,9 +1095,9 @@ public class OtrService {
                     }
                     break;
                     
-                case ORDER_COMPLETION:
+                case DOC_REMINDER:
                     if (placeholders.size() >= 4) {
-                        return String.format("Hello %s! Have you completed the delivery to %s? Order: %s, Truck: %s. Please confirm the delivery status.",
+                        return String.format("Hello %s! Please submit the required documents for delivery to %s. Order: %s, Truck: %s. Please confirm document status.",
                             placeholders.get(0), placeholders.get(1), placeholders.get(2), placeholders.get(3));
                     }
                     break;
@@ -1390,8 +1164,8 @@ public class OtrService {
             return "Hi {0} (Truck: {1}), For your upcoming trip from {2} → {3} for {4} is scheduled on {5}. 👉 Please confirm if you will reach the loading point on time by {6}? Please reply:";
             case LOADING_CONFIRMATION:
                 return "Hi {0}! Please confirm the loading status at {1}. Commodity: {2}, Order: {3}. Are you ready to start loading?";
-            case ORDER_COMPLETION:
-                return "Hello {0}! Have you completed the delivery to {1}? Order: {2}, Truck: {3}. Please confirm the delivery status.";
+            case DOC_REMINDER:
+                return "Hello {0}! Please submit the required documents for delivery to {1}. Order: {2}, Truck: {3}. Please confirm document status.";
             case REMINDER:
                 return "📅 Reminder for {0}: Order {1} is scheduled for {2}. Truck: {3}. Please provide a status update.";
             case STATUS_FOLLOW_UP:

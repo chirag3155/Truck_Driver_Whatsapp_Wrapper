@@ -10,11 +10,12 @@ import com.driver.whatsapp.wrapper.entity.TransactionDetail;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.time.Instant;
 import java.time.format.DateTimeParseException;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.Map;
+import java.util.HashMap;
 import java.util.Optional;
 
 @Slf4j
@@ -33,11 +34,7 @@ public class MessageProcessingService {
     @Autowired
     private TransactionDetailRepository transactionDetailRepository;
 
-    // Conversation timeout configuration (30 minutes by default)
-    private static final long CONVERSATION_TIMEOUT_MS = 30 * 60 * 1000L; // 30 minutes
 
-    // Track last message timestamp for each driver
-    private final Map<String, Long> lastMessageTimestamps = new ConcurrentHashMap<>();
 
     /**
      * Process incoming WhatsApp message from driver using Chat Module
@@ -51,7 +48,7 @@ public class MessageProcessingService {
             String messageType = getMessageType(result.getMessage());
             String platform = getPlatform(result.getIntegrationType());
             long timestamp = parseReceivedAtTimestamp(result.getReceivedAt());
-
+            
             log.info("Processing message from driver: {} ({}), Content: '{}', Type: {}, Platform: {}, Timestamp: {}", 
                     driverPhone, driverName, messageContent, messageType, platform, timestamp);
 
@@ -67,18 +64,17 @@ public class MessageProcessingService {
             String flowName = transactionDetail.get().getFlowName();
             String communicationMode = transactionDetail.get().getCommunicationMode();
 
-            ApiAssistantMapping apiAssistantMapping = apiAssistantMappingRepository.findById(new ApiAssistantMappingId(flowName, communicationMode))
+            ApiAssistantMappingId mappingKey = new ApiAssistantMappingId();
+            mappingKey.setApiName(flowName);
+            mappingKey.setCommunicationMode(communicationMode);
+            mappingKey.setLang("en"); // Default language
+            
+            ApiAssistantMapping apiAssistantMapping = apiAssistantMappingRepository.findById(mappingKey)
                 .orElseThrow(() -> new RuntimeException("Api Assistant Mapping not found for flow: " + flowName + " and mode: " + communicationMode));
 
             String tenantId = apiAssistantMapping.getTenantId();
             String assistantId = apiAssistantMapping.getAssistantId();
             
-            // Check and cleanup expired conversation before processing new message
-            cleanupExpiredConversation(driverPhone);
-
-            // Update last message timestamp for this driver
-            lastMessageTimestamps.put(driverPhone, System.currentTimeMillis());
-
             // Skip empty messages
             if (messageContent == null || messageContent.trim().isEmpty()) {
                 log.warn("Received empty message from driver {}", driverPhone);
@@ -117,13 +113,59 @@ public class MessageProcessingService {
 
     /**
      * Extract message content from webhook response
+     * For text messages, returns the text content
+     * For document messages, returns the entire message object as JSON string
+     * For media messages (image, audio, video), returns the entire message object as JSON string
      */
     private String getMessageContent(WhatsAppWebhookResponse.MessageContent message) {
-        if (message != null && message.getText() != null) {
-            return message.getText();
+        if (message != null) {
+            // For text messages
+            if (message.getText() != null) {
+                return message.getText();
+            }
+            // For document messages, return the entire message object as JSON
+            if ("document".equalsIgnoreCase(message.getType())) {
+                try {
+                    // Create a JSON representation of the message object
+                    Map<String, Object> messageJson = new HashMap<>();
+                    messageJson.put("url", message.getUrl());
+                    messageJson.put("caption", message.getCaption());
+                    messageJson.put("type", message.getType());
+                    
+                    ObjectMapper objectMapper = new ObjectMapper();
+                    return objectMapper.writeValueAsString(messageJson);
+                } catch (Exception e) {
+                    log.error("Error converting document message to JSON: {}", e.getMessage());
+                    return "Document uploaded";
+                }
+            }
+            // For media messages (image, audio, video), return the entire message object as JSON
+            if ("image".equalsIgnoreCase(message.getType()) || 
+                "audio".equalsIgnoreCase(message.getType()) || 
+                "video".equalsIgnoreCase(message.getType())) {
+                try {
+                    // Create a JSON representation of the message object
+                    Map<String, Object> messageJson = new HashMap<>();
+                    messageJson.put("url", message.getUrl());
+                    messageJson.put("type", message.getType());
+                    
+                    // Only include caption if it exists and is not empty
+                    if (message.getCaption() != null && !message.getCaption().trim().isEmpty()) {
+                        messageJson.put("caption", message.getCaption().trim());
+                    }
+                    
+                    ObjectMapper objectMapper = new ObjectMapper();
+                    return objectMapper.writeValueAsString(messageJson);
+                } catch (Exception e) {
+                    log.error("Error converting {} message to JSON: {}", message.getType(), e.getMessage());
+                    return message.getType().substring(0, 1).toUpperCase() + message.getType().substring(1) + " uploaded";
+                }
+            }
         }
         return "";
     }
+
+
 
     /**
      * Extract contact name from webhook response
@@ -210,157 +252,8 @@ public class MessageProcessingService {
         return timestamp;
     }
 
-    /**
-     * Cleanup expired conversation for a driver if timeout exceeded
-     */
-    private void cleanupExpiredConversation(String driverPhone) {
-        Long lastTimestamp = lastMessageTimestamps.get(driverPhone);
-        if (lastTimestamp != null) {
-            long timeSinceLastMessage = System.currentTimeMillis() - lastTimestamp;
-            if (timeSinceLastMessage > CONVERSATION_TIMEOUT_MS) {
-                log.info("🧹 Conversation expired for driver {} (inactive for {} minutes). Resetting conversation.", 
-                        driverPhone, timeSinceLastMessage / (60 * 1000));
-                
-                // Reset chat module conversation
-                chatModuleService.resetConversation(driverPhone);
-                
-                // Remove timestamp tracking
-                lastMessageTimestamps.remove(driverPhone);
-                
-                log.debug("✅ Expired conversation cleaned up for driver: {}", driverPhone);
-            } else {
-                log.debug("⏰ Conversation for driver {} still active (last activity {} minutes ago)", 
-                        driverPhone, timeSinceLastMessage / (60 * 1000));
-            }
-        } else {
-            log.debug("🆕 New conversation starting for driver: {}", driverPhone);
-        }
-    }
 
-    /**
-     * Reset conversation for a driver (for testing or when conversation should restart)
-     */
-    public void resetConversationState(String driverPhone) {
-        log.info("🔄 Resetting conversation for driver: {}", driverPhone);
-        
-        // Reset chat module conversation
-        chatModuleService.resetConversation(driverPhone);
-        
-        // Clear timestamp tracking
-        lastMessageTimestamps.remove(driverPhone);
-        
-        log.info("✅ Conversation reset completed for driver: {}", driverPhone);
-    }
 
-    /**
-     * Get current chat module conversation ID for debugging
-     */
-    public String getCurrentChatConversationId(String driverPhone) {
-        return chatModuleService.getCurrentConversationId(driverPhone);
-    }
 
-    /**
-     * Health check method to verify chat module integration
-     */
-    public boolean isChatModuleHealthy() {
-        try {
-            // Test with a simple message to check if chat module is responding
-            String testResponse = chatModuleService.sendMessageToChatModule(
-                "EG_TRU_a5d34a6f", // Default tenant ID for health check
-                "1123", // Default assistant ID for health check
-                "health_check_" + System.currentTimeMillis(), // Conversation ID
-                "test_health_check", // Driver phone
-                "TestDriver", // Driver name
-                "Hello", // Message content
-                "health_check_" + System.currentTimeMillis(), // Message ID
-                System.currentTimeMillis(), // Timestamp
-                "text", // Message type
-                "Whatsapp" // Platform
-            );
-            return testResponse != null && !testResponse.contains("having trouble");
-        } catch (Exception e) {
-            log.error("Chat module health check failed: {}", e.getMessage());
-            return false;
-        }
-    }
 
-    /**
-     * Get conversation status for a driver including timeout info
-     */
-    public ConversationStatus getConversationStatus(String driverPhone) {
-        Long lastTimestamp = lastMessageTimestamps.get(driverPhone);
-        String conversationId = chatModuleService.getCurrentConversationId(driverPhone);
-        
-        if (lastTimestamp == null) {
-            return new ConversationStatus(driverPhone, false, null, 0, false, conversationId);
-        }
-        
-        long timeSinceLastMessage = System.currentTimeMillis() - lastTimestamp;
-        boolean isActive = timeSinceLastMessage <= CONVERSATION_TIMEOUT_MS;
-        long minutesSinceLastMessage = timeSinceLastMessage / (60 * 1000);
-        
-        return new ConversationStatus(driverPhone, true, lastTimestamp, minutesSinceLastMessage, isActive, conversationId);
-    }
-
-    /**
-     * Get current timeout configuration in minutes
-     */
-    public long getConversationTimeoutMinutes() {
-        return CONVERSATION_TIMEOUT_MS / (60 * 1000);
-    }
-
-    /**
-     * Force cleanup of all expired conversations (useful for maintenance)
-     */
-    public int cleanupAllExpiredConversations() {
-        log.info("🧹 Starting cleanup of all expired conversations...");
-        int cleanedUp = 0;
-        
-        // Create a copy of the keys to avoid concurrent modification
-        for (String driverPhone : lastMessageTimestamps.keySet().toArray(new String[0])) {
-            Long lastTimestamp = lastMessageTimestamps.get(driverPhone);
-            if (lastTimestamp != null) {
-                long timeSinceLastMessage = System.currentTimeMillis() - lastTimestamp;
-                if (timeSinceLastMessage > CONVERSATION_TIMEOUT_MS) {
-                    log.debug("Cleaning up expired conversation for driver: {}", driverPhone);
-                    chatModuleService.resetConversation(driverPhone);
-                    lastMessageTimestamps.remove(driverPhone);
-                    cleanedUp++;
-                }
-            }
-        }
-        
-        log.info("✅ Cleanup completed. {} expired conversations removed.", cleanedUp);
-        return cleanedUp;
-    }
-
-    /**
-     * Conversation status information class
-     */
-    public static class ConversationStatus {
-        private String driverPhone;
-        private boolean hasConversation;
-        private Long lastMessageTimestamp;
-        private long minutesSinceLastMessage;
-        private boolean isActive;
-        private String conversationId;
-
-        public ConversationStatus(String driverPhone, boolean hasConversation, Long lastMessageTimestamp, 
-                                long minutesSinceLastMessage, boolean isActive, String conversationId) {
-            this.driverPhone = driverPhone;
-            this.hasConversation = hasConversation;
-            this.lastMessageTimestamp = lastMessageTimestamp;
-            this.minutesSinceLastMessage = minutesSinceLastMessage;
-            this.isActive = isActive;
-            this.conversationId = conversationId;
-        }
-
-        // Getters
-        public String getDriverPhone() { return driverPhone; }
-        public boolean isHasConversation() { return hasConversation; }
-        public Long getLastMessageTimestamp() { return lastMessageTimestamp; }
-        public long getMinutesSinceLastMessage() { return minutesSinceLastMessage; }
-        public boolean isActive() { return isActive; }
-        public String getConversationId() { return conversationId; }
-    }
 } 

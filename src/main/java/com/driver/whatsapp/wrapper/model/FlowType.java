@@ -5,7 +5,7 @@ package com.driver.whatsapp.wrapper.model;
  */
 public enum FlowType {
     LOADING_CONFIRMATION("LOADING_CONFIRMATION"),
-    ORDER_COMPLETION("ORDER_COMPLETION"), 
+    DOC_REMINDER("DOC_REMINDER"), 
     OTR("OTR"),
     REMINDER("REMINDER"),
     STATUS_FOLLOW_UP("STATUS_FOLLOW_UP");

@@ -1,6 +1,7 @@
 package com.driver.whatsapp.wrapper.controller;
 
 import com.driver.whatsapp.wrapper.service.ConfigurationCacheService;
+import com.driver.whatsapp.wrapper.service.TimeoutManagementService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
@@ -19,11 +20,14 @@ import java.util.Map;
 @RestController
 @RequestMapping("/wawrapper/config")
 @Slf4j
-@Tag(name = "Configuration Management", description = "APIs for managing wrapper configurations")
+@Tag(name = "Configuration Management", description = "Endpoints to manage configurations and timeouts")
 public class ConfigurationController {
 
     @Autowired
     private ConfigurationCacheService configService; // Only needed for reload functionality
+
+    @Autowired
+    private TimeoutManagementService timeoutService;
 
     /**
      * Get all cached configurations
@@ -97,18 +101,23 @@ public class ConfigurationController {
      */
     @Operation(
         summary = "Reload Configurations",
-        description = "Manually reload configurations from database into cache"
+        description = "Manually reload configurations from database into cache and update timeouts"
     )
     @PostMapping("/reload")
     public ResponseEntity<Map<String, Object>> reloadConfigurations() {
         try {
+            // First reload all configurations
             configService.reloadConfigurations();
+            
+            // Then update timeouts using new configurations
+            boolean timeoutUpdateSuccess = timeoutService.refreshTimeouts();
             
             Map<String, Object> response = new HashMap<>();
             response.put("status", "success");
             response.put("message", "All configurations reloaded successfully");
             response.put("wrapperConfigCount", ConfigurationCacheService.getCacheSize());
             response.put("apiAssistantMappingCount", ConfigurationCacheService.getApiAssistantMappingCacheSize());
+            response.put("timeoutUpdateSuccess", timeoutUpdateSuccess);
             response.put("timestamp", java.time.LocalDateTime.now().toString());
             
             return ResponseEntity.ok(response);

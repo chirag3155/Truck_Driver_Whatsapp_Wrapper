@@ -1,18 +1,23 @@
 package com.driver.whatsapp.wrapper.service;
 
-import com.driver.whatsapp.wrapper.constants.ConfigurationConstants;
-import com.driver.whatsapp.wrapper.model.DriverDetails;
 import com.driver.whatsapp.wrapper.model.WhatsAppMessage;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
+import org.springframework.web.client.ResourceAccessException;
+import org.springframework.web.client.HttpClientErrorException;
+import org.springframework.web.client.HttpServerErrorException;
+import java.net.SocketTimeoutException;
+import java.net.ConnectException;
 
 import java.util.Arrays;
 import java.util.List;
+import jakarta.annotation.PostConstruct;
 
 @Slf4j
 @Service
@@ -33,41 +38,10 @@ public class WhatsAppService {
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper;
 
-    public WhatsAppService() {
-        this.restTemplate = new RestTemplate();
+    @Autowired
+    public WhatsAppService(RestTemplate restTemplate) {
+        this.restTemplate = restTemplate;
         this.objectMapper = new ObjectMapper();
-    }
-
-    /**
-     * Send initial templated message to driver asking about ETA status
-     */
-    public void sendInitialDriverMessage(DriverDetails driverDetails) {
-        try {
-            log.info("Sending initial template message to driver: {} for order: {}", 
-                    driverDetails.getDriverPhone(), driverDetails.getOrderId());
-            
-            // Get API assistant mapping for driver_details WhatsApp
-            String tenantId = ConfigurationCacheService.getTenantId("driver_details", "whatsapp");
-            String assistantId = ConfigurationCacheService.getAssistantId("driver_details", "whatsapp");
-            
-            if (tenantId != null && assistantId != null) {
-                log.info("Using tenant: {}, assistant: {} for driver_details WhatsApp", tenantId, assistantId);
-            }
-            
-            WhatsAppMessage message = buildTemplatedMessage(driverDetails);
-            sendMessage(message, "/whatsapp/1/message/template");
-            
-            log.info("Initial template message sent successfully to driver: {} for order: {}", 
-                    driverDetails.getDriverPhone(), driverDetails.getOrderId());
-                    
-        } catch (Exception e) {
-            log.error("CRITICAL: Failed to send initial template message to driver {} for order {}: {}", 
-                     driverDetails.getDriverPhone(), driverDetails.getOrderId(), e.getMessage(), e);
-            
-            // This is critical - if initial message fails, the whole workflow stops
-            log.error("ALERT: Driver {} will not receive any communication for order {}!", 
-                     driverDetails.getDriverPhone(), driverDetails.getOrderId());
-        }
     }
 
     /**
@@ -83,104 +57,7 @@ public class WhatsAppService {
         }
     }
 
-    /**
-     * Send follow-up message for new ETA
-     */
-    public void sendNewEtaRequest(String driverPhone, String orderId) {
-        // Get configured message template
-        String message = ConfigurationCacheService.getConfigValue(
-            ConfigurationConstants.NEW_ETA_MESSAGE, 
-            "We understand you're facing a delay. Please provide your new estimated arrival time (e.g., 10:30 AM)."
-        );
-        
-        // Get API assistant mapping for ETA update
-        String tenantId = ConfigurationCacheService.getTenantId("eta_update", "whatsapp");
-        String assistantId = ConfigurationCacheService.getAssistantId("eta_update", "whatsapp");
-        
-        log.info("Sending ETA request using tenant: {}, assistant: {}", tenantId, assistantId);
-        sendTextMessage(driverPhone, message, orderId);
-    }
 
-    /**
-     * Send breakdown inquiry message
-     */
-    public void sendBreakdownInquiry(String driverPhone, String orderId) {
-        String message = "We understand you're facing an issue. Please let us know:\n1. Vehicle breakdown\n2. Traffic delay\n3. Other (please specify)";
-        sendTextMessage(driverPhone, message, orderId);
-    }
-
-    /**
-     * Send confirmation message
-     */
-    public void sendConfirmationMessage(String driverPhone, String confirmationText, String orderId) {
-        sendTextMessage(driverPhone, confirmationText, orderId);
-    }
-
-    /**
-     * Build templated message for initial driver contact
-     */
-    private WhatsAppMessage buildTemplatedMessage(DriverDetails driverDetails) {
-        // Get button text from configuration
-        String yesButtonText = ConfigurationCacheService.getConfigValue(
-            ConfigurationConstants.YES_BUTTON_TEXT, "Yes I am on time");
-        String noButtonText = ConfigurationCacheService.getConfigValue(
-            ConfigurationConstants.NO_BUTTON_TEXT, "I am late");
-            
-        WhatsAppMessage.Button yesButton = WhatsAppMessage.Button.builder()
-                .type("QUICK_REPLY")
-                .parameter(yesButtonText)
-                .build();
-
-        WhatsAppMessage.Button noButton = WhatsAppMessage.Button.builder()
-                .type("QUICK_REPLY")
-                .parameter(noButtonText)
-                .build();
-
-        WhatsAppMessage.Body body = WhatsAppMessage.Body.builder()
-                .placeholders(Arrays.asList(
-                        driverDetails.getDriverName(),
-                        driverDetails.getPickup(),
-                        driverDetails.getDropoff(),
-                        driverDetails.getEtaTime()
-                ))
-                .build();
-
-        WhatsAppMessage.TemplateData templateData = WhatsAppMessage.TemplateData.builder()
-                .body(body)
-                .buttons(Arrays.asList(yesButton, noButton))
-                .build();
-
-        // Get template configuration
-        String templateName = ConfigurationCacheService.getConfigValue(
-            ConfigurationConstants.WHATSAPP_TEMPLATE_NAME, "11_start_time_due");
-        String templateLanguage = ConfigurationCacheService.getConfigValue(
-            ConfigurationConstants.TEMPLATE_LANGUAGE, "en");
-
-        WhatsAppMessage.Content content = WhatsAppMessage.Content.builder()
-                .templateName(templateName)
-                .templateData(templateData)
-                .language(templateLanguage)
-                .build();
-
-        // Get callback data configuration
-        String callbackData = ConfigurationCacheService.getConfigValue(
-            ConfigurationConstants.INITIAL_CALLBACK_DATA, "initial_eta_check");
-
-        WhatsAppMessage.Message messageItem = WhatsAppMessage.Message.builder()
-                .from(whatsappFromNumber)
-                .to(driverDetails.getDriverPhone())
-                .messageId(driverDetails.getOrderId())
-                .content(content)
-                .callbackData(callbackData)
-                // .notifyUrl(webhookUrl + "/whatsapp/callback")
-                .build();
-
-                log.info("notifyUrl: {}", webhookUrl + "/whatsapp/callback");
-
-        return WhatsAppMessage.builder()
-                .messages(Arrays.asList(messageItem))
-                .build();
-    }
 
     /**
      * Build simple text message (direct format, no messages array)
@@ -191,7 +68,7 @@ public class WhatsAppService {
                 .build();
 
         WhatsAppMessage.SimpleTextMessage message = WhatsAppMessage.SimpleTextMessage.builder()
-                .from(whatsappFromNumber)
+                .from(whatsappFromNumber) // This line was removed
                 .to(driverPhone)
                 .messageId(orderId)
                 .content(content)
@@ -208,10 +85,10 @@ public class WhatsAppService {
      */
     private void sendSimpleMessage(WhatsAppMessage.SimpleTextMessage message, String endpoint) {
         try {
-            String url = infobipApiUrl + endpoint;
+            String url = infobipApiUrl + endpoint; // This line was removed
             
             HttpHeaders headers = new HttpHeaders();
-            headers.set("Authorization", "App " + infobipApiKey);
+            headers.set("Authorization", "App " + infobipApiKey); // This line was removed
             headers.setContentType(MediaType.APPLICATION_JSON);
 
             String jsonBody = objectMapper.writeValueAsString(message);
@@ -228,18 +105,27 @@ public class WhatsAppService {
                 handleWhatsAppFailure(message, "API Error: " + response.getStatusCode());
             }
             
-        } catch (org.springframework.web.client.ResourceAccessException e) {
-            // Network/connection issues
-            log.error("WhatsApp API connection failed for {}: {}", message.getTo(), e.getMessage());
+        } catch (ResourceAccessException e) {
+            Throwable cause = e.getMostSpecificCause();
+            if (cause instanceof ConnectException) {
+                log.error("Connection timeout while sending WhatsApp message to: {}. Infobip API might be down or unreachable. Error: {}", 
+                    message.getTo(), cause.getMessage());
+            } else if (cause instanceof SocketTimeoutException) {
+                log.error("Read timeout while sending WhatsApp message to: {}. Infobip API took too long to respond. Error: {}", 
+                    message.getTo(), cause.getMessage());
+            } else {
+                log.error("Network error while sending WhatsApp message to: {}. Error: {}", 
+                    message.getTo(), e.getMessage());
+            }
             handleWhatsAppFailure(message, "Connection failed: " + e.getMessage());
             
-        } catch (org.springframework.web.client.HttpClientErrorException e) {
+        } catch (HttpClientErrorException e) {
             // 4xx errors
             log.error("WhatsApp API client error for {}: {} - {}", 
                      message.getTo(), e.getStatusCode(), e.getResponseBodyAsString());
             handleWhatsAppFailure(message, "Client error: " + e.getStatusCode());
             
-        } catch (org.springframework.web.client.HttpServerErrorException e) {
+        } catch (HttpServerErrorException e) {
             // 5xx errors  
             log.error("WhatsApp API server error for {}: {} - {}", 
                      message.getTo(), e.getStatusCode(), e.getResponseBodyAsString());
@@ -274,10 +160,10 @@ public class WhatsAppService {
      */
     private void sendMessage(WhatsAppMessage message, String endpoint) {
         try {
-            String url = infobipApiUrl + endpoint;
+            String url = infobipApiUrl + endpoint; // This line was removed
             
             HttpHeaders headers = new HttpHeaders();
-            headers.set("Authorization", "App " + infobipApiKey);
+            headers.set("Authorization", "App " + infobipApiKey); // This line was removed
             headers.setContentType(MediaType.APPLICATION_JSON);
 
             String jsonBody = objectMapper.writeValueAsString(message);
@@ -293,18 +179,27 @@ public class WhatsAppService {
                 handleTemplateMessageFailure(message, "API Error: " + response.getStatusCode());
             }
             
-        } catch (org.springframework.web.client.ResourceAccessException e) {
-            // Network/connection issues
-            log.error("WhatsApp API connection failed for templated message: {}", e.getMessage());
+        } catch (ResourceAccessException e) {
+            Throwable cause = e.getMostSpecificCause();
+            if (cause instanceof ConnectException) {
+                log.error("Connection timeout while sending WhatsApp message to: {}. Infobip API might be down or unreachable. Error: {}", 
+                    message.getMessages().get(0).getTo(), cause.getMessage());
+            } else if (cause instanceof SocketTimeoutException) {
+                log.error("Read timeout while sending WhatsApp message to: {}. Infobip API took too long to respond. Error: {}", 
+                    message.getMessages().get(0).getTo(), cause.getMessage());
+            } else {
+                log.error("Network error while sending WhatsApp message to: {}. Error: {}", 
+                    message.getMessages().get(0).getTo(), e.getMessage());
+            }
             handleTemplateMessageFailure(message, "Connection failed: " + e.getMessage());
             
-        } catch (org.springframework.web.client.HttpClientErrorException e) {
+        } catch (HttpClientErrorException e) {
             // 4xx errors
             log.error("WhatsApp API client error for templated message: {} - {}", 
                      e.getStatusCode(), e.getResponseBodyAsString());
             handleTemplateMessageFailure(message, "Client error: " + e.getStatusCode());
             
-        } catch (org.springframework.web.client.HttpServerErrorException e) {
+        } catch (HttpServerErrorException e) {
             // 5xx errors  
             log.error("WhatsApp API server error for templated message: {} - {}", 
                      e.getStatusCode(), e.getResponseBodyAsString());

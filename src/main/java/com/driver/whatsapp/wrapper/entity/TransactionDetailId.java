@@ -4,28 +4,20 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.AllArgsConstructor;
 import lombok.EqualsAndHashCode;
-import lombok.Builder;
 
-import jakarta.persistence.*;
 import java.io.Serializable;
 
-@Embeddable
+/**
+ * Composite primary key for TransactionDetail entity.
+ * Must match the @Id fields in both name and type.
+ */
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-@Builder
 @EqualsAndHashCode
 public class TransactionDetailId implements Serializable {
-    
-    @Column(name = "truck_number", nullable = false, length = 50)
-    private String truckNumber;
-    
-    @Column(name = "order_number", nullable = false, length = 100)
-    private String orderNumber;
-    
-    @Column(name = "phone_number", nullable = false, length = 15)
     private String phoneNumber;
-    
-    @Column(name = "transaction_id", nullable = false, length = 100)
     private String transactionId;
+    private String truckNumber;
+    private String orderNumber;
 } 

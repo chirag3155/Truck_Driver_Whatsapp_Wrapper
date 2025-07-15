@@ -29,6 +29,7 @@ public class ConfigurationCacheService {
     private String moduleName;
 
     // Static thread-safe HashMap for configuration cache - accessible throughout application
+    // Key: param_name (unique identifier), Value: param_value
     private static final Map<String, String> configurationCache = new ConcurrentHashMap<>();
     
     // Static thread-safe HashMap for API assistant mapping cache - key: "apiName_communicationMode", value: mapping object
@@ -73,13 +74,13 @@ public class ConfigurationCacheService {
                 // Clear existing cache
                 configurationCache.clear();
 
-                // Populate cache with param_id -> param_value mapping
+                // Populate cache with param_name -> param_value mapping
                 for (WrapperConfiguration config : configurations) {
-                    String paramId = config.getId().getParamId();
+                    String paramName = config.getParamName();
                     String paramValue = config.getParamValue();
                     
-                    configurationCache.put(paramId, paramValue);
-                    log.debug("Loaded wrapper configuration: {} = {}", paramId, paramValue);
+                    configurationCache.put(paramName, paramValue);
+                    log.debug("Loaded wrapper configuration: {} = {}", paramName, paramValue);
                 }
 
                 log.info("Successfully loaded {} wrapper configurations for module: {}", 
@@ -120,24 +121,24 @@ public class ConfigurationCacheService {
     }
 
     /**
-     * Get configuration value by parameter ID - STATIC ACCESS
+     * Get configuration value by parameter name - STATIC ACCESS
      */
-    public static String getConfigValue(String paramId) {
-        return configurationCache.get(paramId);
+    public static String getConfigValue(String paramName) {
+        return configurationCache.get(paramName);
     }
 
     /**
-     * Get configuration value with default fallback - STATIC ACCESS
+     * Get configuration value by parameter name with default fallback - STATIC ACCESS
      */
-    public static String getConfigValue(String paramId, String defaultValue) {
-        return configurationCache.getOrDefault(paramId, defaultValue);
+    public static String getConfigValue(String paramName, String defaultValue) {
+        return configurationCache.getOrDefault(paramName, defaultValue);
     }
 
     /**
      * Check if configuration exists - STATIC ACCESS
      */
-    public static boolean hasConfig(String paramId) {
-        return configurationCache.containsKey(paramId);
+    public static boolean hasConfig(String paramName) {
+        return configurationCache.containsKey(paramName);
     }
 
     /**
@@ -165,11 +166,18 @@ public class ConfigurationCacheService {
     // ==================== API ASSISTANT MAPPING STATIC METHODS ====================
     
     /**
-     * Get API assistant mapping by API name and communication mode - STATIC ACCESS
+     * Get API assistant mapping by API name, communication mode, and language - STATIC ACCESS
+     */
+    public static ApiAssistantMapping getApiAssistantMapping(String apiName, String communicationMode, String lang) {
+        String combinedKey = apiName + "_" + communicationMode + "_" + lang;
+        return apiAssistantMappingCache.get(combinedKey);
+    }
+    
+    /**
+     * Get API assistant mapping by API name and communication mode with default language - STATIC ACCESS
      */
     public static ApiAssistantMapping getApiAssistantMapping(String apiName, String communicationMode) {
-        String combinedKey = apiName + "_" + communicationMode;
-        return apiAssistantMappingCache.get(combinedKey);
+        return getApiAssistantMapping(apiName, communicationMode, "en");
     }
     
     /**
@@ -199,9 +207,16 @@ public class ConfigurationCacheService {
     /**
      * Check if API assistant mapping exists - STATIC ACCESS
      */
-    public static boolean hasApiAssistantMapping(String apiName, String communicationMode) {
-        String combinedKey = apiName + "_" + communicationMode;
+    public static boolean hasApiAssistantMapping(String apiName, String communicationMode, String lang) {
+        String combinedKey = apiName + "_" + communicationMode + "_" + lang;
         return apiAssistantMappingCache.containsKey(combinedKey);
+    }
+    
+    /**
+     * Check if API assistant mapping exists with default language - STATIC ACCESS
+     */
+    public static boolean hasApiAssistantMapping(String apiName, String communicationMode) {
+        return hasApiAssistantMapping(apiName, communicationMode, "en");
     }
     
     /**

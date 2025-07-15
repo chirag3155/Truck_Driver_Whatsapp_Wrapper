@@ -37,4 +37,10 @@ public interface WrapperConfigurationRepository extends JpaRepository<WrapperCon
      */
     @Query("SELECT COUNT(wc) > 0 FROM WrapperConfiguration wc WHERE wc.id.moduleName = :moduleName AND wc.id.paramId = :paramId")
     boolean existsByModuleNameAndParamId(@Param("moduleName") String moduleName, @Param("paramId") String paramId);
+
+    /**
+     * Find a specific configuration by module name and parameter name
+     */
+    @Query("SELECT wc FROM WrapperConfiguration wc WHERE wc.id.moduleName = :moduleName AND wc.paramName = :paramName")
+    Optional<WrapperConfiguration> findByModuleNameAndParamName(@Param("moduleName") String moduleName, @Param("paramName") String paramName);
 } 

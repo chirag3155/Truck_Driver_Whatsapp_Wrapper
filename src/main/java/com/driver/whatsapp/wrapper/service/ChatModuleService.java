@@ -1,5 +1,6 @@
 package com.driver.whatsapp.wrapper.service;
 
+import com.driver.whatsapp.wrapper.constants.ConfigurationConstants;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -7,107 +8,36 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestTemplate;
-
+import java.net.SocketTimeoutException;
+import java.net.ConnectException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
+import com.driver.whatsapp.wrapper.exception.ApiServiceException;
+import com.driver.whatsapp.wrapper.service.ConfigurationCacheService;
 
 @Service
 @Slf4j
 public class ChatModuleService {
+
+    private static final String DEFAULT_CHAT_API_URL = "https://eva-integration.bngrenew.com/chat_module/chat";
 
     @Autowired
     private RestTemplate restTemplate;
 
     private static final ObjectMapper objectMapper = new ObjectMapper();
     
-    // Fixed configuration values
-    private static final String CHAT_API_URL = "https://eva-integration.bngrenew.com/chat_module/chat";
-    // private static final String TENANT_ID = "EG_TRU_a5d34a6f";
-    // private static final String ASSISTANT_ID = "1123";
     private static final String AUTH_TOKEN_SUFFIX = "_5";
     private static final String LANGUAGE_ID = "en-US";
     private static final String LANGUAGE_NAME = "English";
 
-    // Store conversation IDs per driver phone number
-    private final Map<String, String> conversationIds = new ConcurrentHashMap<>();
-
-    /**
-     * Send message to chat module and get AI response
-     */
-    public String sendMessageToChatModule(String tenantId, String assistantId, String conversationId, String driverPhone, String driverName, String messageContent, String messageId, long timestamp, String messageType, String platform) {
-        try {
-            
-            // Create auth token with phone number + suffix
-            String authToken = driverPhone.replaceAll("[^0-9]", "") + AUTH_TOKEN_SUFFIX;
-            
-            // Build request payload
-            Map<String, Object> payload = new HashMap<>();
-            payload.put("conversation_id", conversationId);
-            payload.put("language_id", LANGUAGE_ID);
-            payload.put("language_name", LANGUAGE_NAME);
-            payload.put("tenant_id", tenantId);
-            payload.put("user_id", driverPhone); // Using phone as user_id as mentioned
-            payload.put("name", driverName); // Using actual driver name from webhook
-            payload.put("phone_no", driverPhone);
-            payload.put("auth_token", authToken);
-            payload.put("assistant_id", assistantId);
-            payload.put("platform", platform); // Using dynamic platform from webhook
-            payload.put("text", messageContent);
-            payload.put("message_id", messageId);
-            payload.put("timestamp", timestamp);
-            payload.put("message_type", messageType); // Using dynamic message type from webhook
-
-            log.info("Sending message to chat module for driver {}: {}", driverPhone, messageContent);
-            log.debug("Chat module payload: {}", objectMapper.writeValueAsString(payload));
-
-            // Setup HTTP request
-            HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.APPLICATION_JSON);
-            headers.setAccept(List.of(MediaType.APPLICATION_JSON));
-            
-            HttpEntity<Map<String, Object>> request = new HttpEntity<>(payload, headers);
-
-            // Make API call
-            ResponseEntity<ChatModuleResponse> response = restTemplate.exchange(
-                CHAT_API_URL,
-                HttpMethod.POST,
-                request,
-                ChatModuleResponse.class
-            );
-
-            if (response.getStatusCode() == HttpStatus.OK && response.getBody() != null) {
-                ChatModuleResponse chatResponse = response.getBody();
-                log.info("Received chat module response for driver {}: {}", driverPhone, chatResponse.getChunk());
-                return chatResponse.getChunk();
-            } else {
-                log.error("Failed to get valid response from chat module. Status: {}", response.getStatusCode());
-                return "I'm having trouble processing your message right now. Please try again.";
-            }
-
-        } catch (org.springframework.web.client.ResourceAccessException e) {
-            // API timeout or connection issues
-            log.error("Chat module API timeout/connection error for driver {}: {}", driverPhone, e.getMessage());
-            return "I'm having connection issues right now. Please try again in a moment.";
-            
-        } catch (org.springframework.web.client.HttpClientErrorException e) {
-            // Client error (4xx) 
-            log.error("Chat module client error for driver {}: {} - {}", driverPhone, e.getStatusCode(), e.getResponseBodyAsString());
-            return "There was an issue with your request. Please try again.";
-            
-        } catch (org.springframework.web.client.HttpServerErrorException e) {
-            // Server error (5xx)
-            log.error("Chat module server error for driver {}: {} - {}", driverPhone, e.getStatusCode(), e.getResponseBodyAsString());
-            return "Our chat service is temporarily down. Please try again in a few minutes.";
-            
-        } catch (Exception e) {
-            // Any other unexpected error
-            log.error("Unexpected error calling chat module for driver {}: {}", driverPhone, e.getMessage(), e);
-            return "Sorry, something went wrong. Please try again later.";
-        }
+    private String getChatApiUrl() {
+        return ConfigurationCacheService.getConfigValue(
+            ConfigurationConstants.CHAT_MODULE_API_URL,
+            DEFAULT_CHAT_API_URL
+        );
     }
 
     /**
@@ -115,10 +45,8 @@ public class ChatModuleService {
      */
     public String sendMessageToChatModuleWithConfig(String conversationId,String driverPhone, String driverName, String messageContent, String messageId, long timestamp, String messageType, String platform, String tenantId, String assistantId) {
         try {
-            // Generate or get existing conversation ID
-            // String conversationId = getOrCreateConversationId(driverPhone);
-            
             // Create auth token with phone number + suffix
+            messageType = "text";
             String authToken = driverPhone.replaceAll("[^0-9]", "") + AUTH_TOKEN_SUFFIX;
             
             // Build request payload with custom tenant and assistant IDs
@@ -126,6 +54,7 @@ public class ChatModuleService {
             payload.put("conversation_id", conversationId);
             payload.put("language_id", LANGUAGE_ID);
             payload.put("language_name", LANGUAGE_NAME);
+
             payload.put("tenant_id", tenantId); // Use custom tenant ID
             payload.put("user_id", driverPhone); // Using phone as user_id as mentioned
             payload.put("name", driverName); // Using actual driver name from webhook
@@ -147,10 +76,9 @@ public class ChatModuleService {
             headers.setAccept(List.of(MediaType.APPLICATION_JSON));
             
             HttpEntity<Map<String, Object>> request = new HttpEntity<>(payload, headers);
-
             // Make API call
             ResponseEntity<ChatModuleResponse> response = restTemplate.exchange(
-                CHAT_API_URL,
+                getChatApiUrl(),
                 HttpMethod.POST,
                 request,
                 ChatModuleResponse.class
@@ -161,56 +89,50 @@ public class ChatModuleService {
                 log.info("Received chat module response for driver {}: {}", driverPhone, chatResponse.getChunk());
                 return chatResponse.getChunk();
             } else {
-                log.error("Failed to get valid response from chat module. Status: {}", response.getStatusCode());
-                return "I'm having trouble processing your message right now. Please try again.";
+                log.error("Failed to get valid response from chat module - Status: {}", response.getStatusCode());
+                return getDefaultResponse();
             }
-
-        } catch (org.springframework.web.client.ResourceAccessException e) {
-            // API timeout or connection issues
-            log.error("Chat module API timeout/connection error for driver {}: {}", driverPhone, e.getMessage());
-            return "I'm having connection issues right now. Please try again in a moment.";
-            
-        } catch (org.springframework.web.client.HttpClientErrorException e) {
-            // Client error (4xx) 
-            log.error("Chat module client error for driver {}: {} - {}", driverPhone, e.getStatusCode(), e.getResponseBodyAsString());
-            return "There was an issue with your request. Please try again.";
-            
-        } catch (org.springframework.web.client.HttpServerErrorException e) {
-            // Server error (5xx)
-            log.error("Chat module server error for driver {}: {} - {}", driverPhone, e.getStatusCode(), e.getResponseBodyAsString());
-            return "Our chat service is temporarily down. Please try again in a few minutes.";
+        } catch (ResourceAccessException e) {
+            Throwable cause = e.getMostSpecificCause();
+            if (cause instanceof ConnectException) {
+                log.error("Connection timeout while calling chat module for driver: {} - Chat module might be down or unreachable", driverPhone, cause);
+            } else if (cause instanceof SocketTimeoutException) {
+                log.error("Read timeout while calling chat module for driver: {} - Chat module took too long to respond", driverPhone, cause);
+            } else {
+                log.error("Network error while calling chat module for driver: {} - {}", driverPhone, e.getMessage(), e);
+            }
+            return getDefaultResponse();
             
         } catch (Exception e) {
             // Any other unexpected error
-            log.error("Unexpected error calling chat module for driver {}: {}", driverPhone, e.getMessage(), e);
-            return "Sorry, something went wrong. Please try again later.";
+            log.error("Error calling chat module for driver: {} - {}", driverPhone, e.getMessage(), e);
+            return getDefaultResponse();
         }
     }
 
-    /**
-     * Get or create conversation ID for a driver
-     */
-    private String getOrCreateConversationId(String driverPhone) {
-        return conversationIds.computeIfAbsent(driverPhone, k -> {
-            String newConversationId = UUID.randomUUID().toString();
-            log.info("Generated new conversation ID {} for driver {}", newConversationId, driverPhone);
-            return newConversationId;
-        });
+    public void sendToChatModule(String message, String phoneNumber, String messageType) {
+        try {
+            Map<String, String> requestBody = new HashMap<>();
+            requestBody.put("message", message);
+            requestBody.put("phone_number", phoneNumber);
+            requestBody.put("message_type", messageType);
+
+            ResponseEntity<String> response = restTemplate.postForEntity(
+                getChatApiUrl(),
+                requestBody,
+                String.class
+            );
+
+            log.info("Chat module response status: {}", response.getStatusCode());
+            log.debug("Chat module response body: {}", response.getBody());
+        } catch (Exception ex) {
+            log.error("Error sending message to chat module: {}", ex.getMessage(), ex);
+            throw new ApiServiceException("ChatModule", "Failed to send message to chat module", ex);
+        }
     }
 
-    /**
-     * Reset conversation for a driver (useful for testing or when conversation should restart)
-     */
-    public void resetConversation(String driverPhone) {
-        conversationIds.remove(driverPhone);
-        log.info("Reset conversation for driver {}", driverPhone);
-    }
-
-    /**
-     * Get current conversation ID for a driver (for debugging)
-     */
-    public String getCurrentConversationId(String driverPhone) {
-        return conversationIds.get(driverPhone);
+    private String getDefaultResponse() {
+        return "I'm having trouble processing your message right now. Please try again in a moment.";
     }
 
     /**

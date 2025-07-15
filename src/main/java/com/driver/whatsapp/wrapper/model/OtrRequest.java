@@ -63,6 +63,12 @@ public class OtrRequest {
     @JsonProperty("tenantId")
     private String tenantId;
 
+    @JsonProperty("transactionId")
+    private String transactionId;
+
+    @JsonProperty("conversationId")
+    private String conversationId;
+
     @JsonProperty("lang")
     private String lang;
     

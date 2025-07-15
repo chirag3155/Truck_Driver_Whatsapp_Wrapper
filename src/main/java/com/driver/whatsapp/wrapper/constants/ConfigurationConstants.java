@@ -270,6 +270,11 @@ public final class ConfigurationConstants {
      */
     public static final String CHAT_MODULE_TIMEOUT = "chat_module_timeout";
 
+    /**
+     * Chat module API URL
+     */
+    public static final String CHAT_MODULE_API_URL = "CHAT_MODULE_API_URL";
+
     // ==================== VALIDATION SETTINGS ====================
     
     /**
@@ -303,4 +308,12 @@ public final class ConfigurationConstants {
      * Enable cache statistics (default: false)
      */
     public static final String ENABLE_CACHE_STATS = "enable_cache_stats";
+
+    // Timeout Configuration Parameters
+    public static final String REST_CONNECT_TIMEOUT = "REST_CONNECT_TIMEOUT";
+    public static final String REST_READ_TIMEOUT = "REST_READ_TIMEOUT";
+    
+    // Default Timeout Values (in milliseconds)
+    public static final String DEFAULT_CONNECT_TIMEOUT = "30000"; // 30 seconds
+    public static final String DEFAULT_READ_TIMEOUT = "30000";    // 30 seconds
 } 

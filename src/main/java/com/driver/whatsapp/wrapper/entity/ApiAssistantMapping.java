@@ -1,54 +1,47 @@
 package com.driver.whatsapp.wrapper.entity;
 
-import lombok.Data;
-import lombok.NoArgsConstructor;
-import lombok.AllArgsConstructor;
-
 import jakarta.persistence.*;
+import lombok.Data;
+import java.io.Serializable;
 
+/**
+ * Entity representing the mapping between APIs and assistant configurations.
+ * <p>
+ * Used to determine which assistant configuration applies to a given API and communication mode.
+ *
+ * @author mohd.shadab
+ */
 @Entity
 @Table(name = "api_assistant_mapping")
+@IdClass(ApiAssistantMappingId.class)
 @Data
-@NoArgsConstructor
-@AllArgsConstructor
 public class ApiAssistantMapping {
-    
-    @EmbeddedId
-    private ApiAssistantMappingId id;
-    
-    @Column(name = "tenant_id", nullable = false, length = 100)
-    private String tenantId;
-    
-    @Column(name = "assistant_id", nullable = false, length = 100)
+    @Id
+    @Column(name = "api_name")
+    private String apiName;
+
+    @Id
+    @Column(name = "communication_mode")
+    private String communicationMode;
+
+    @Id
+    @Column(name = "lang")
+    private String lang;
+
+    @Column(name = "assistant_id")
     private String assistantId;
-    
-    @Column(name = "next_communication_mode", nullable = false, length = 50)
+
+    @Column(name = "tenant_id")
+    private String tenantId;
+
+    @Column(name = "next_communication_mode")
     private String nextCommunicationMode;
-    
-    @Column(name = "template_message", nullable = true, columnDefinition = "JSON")
-    private String templateMessage;
-    
+
     /**
-     * Get combined key for cache mapping (apiName_communicationMode)
+     * Get combined key for caching purposes
      */
     public String getCombinedKey() {
-        if (id != null) {
-            return id.getApiName() + "_" + id.getCommunicationMode();
-        }
-        return null;
+        return apiName + "_" + communicationMode + "_" + lang;
     }
-    
-    /**
-     * Convenience method to get API name
-     */
-    public String getApiName() {
-        return id != null ? id.getApiName() : null;
-    }
-    
-    /**
-     * Convenience method to get communication mode
-     */
-    public String getCommunicationMode() {
-        return id != null ? id.getCommunicationMode() : null;
-    }
-} 
+
+}
