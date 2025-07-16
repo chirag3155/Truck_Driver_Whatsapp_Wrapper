@@ -30,8 +30,6 @@ public class ChatModuleService {
     private static final ObjectMapper objectMapper = new ObjectMapper();
     
     private static final String AUTH_TOKEN_SUFFIX = "_5";
-    private static final String LANGUAGE_ID = "en-US";
-    private static final String LANGUAGE_NAME = "English";
 
     private String getChatApiUrl() {
         return ConfigurationCacheService.getConfigValue(
@@ -43,17 +41,18 @@ public class ChatModuleService {
     /**
      * Send message to chat module with custom tenant and assistant IDs
      */
-    public String sendMessageToChatModuleWithConfig(String conversationId,String driverPhone, String driverName, String messageContent, String messageId, long timestamp, String messageType, String platform, String tenantId, String assistantId) {
+    public String sendMessageToChatModuleWithConfig(String conversationId,String driverPhone, String driverName, String messageContent, String messageId, long timestamp, String messageType, String platform, String tenantId, String assistantId, String lang) {
         try {
             // Create auth token with phone number + suffix
             messageType = "text";
+            String language_name = ConfigurationCacheService.getLanguageName(lang, "English");
             String authToken = driverPhone.replaceAll("[^0-9]", "") + AUTH_TOKEN_SUFFIX;
             
             // Build request payload with custom tenant and assistant IDs
             Map<String, Object> payload = new HashMap<>();
             payload.put("conversation_id", conversationId);
-            payload.put("language_id", LANGUAGE_ID);
-            payload.put("language_name", LANGUAGE_NAME);
+            payload.put("language_id", lang);
+            payload.put("language_name", language_name);
 
             payload.put("tenant_id", tenantId); // Use custom tenant ID
             payload.put("user_id", driverPhone); // Using phone as user_id as mentioned

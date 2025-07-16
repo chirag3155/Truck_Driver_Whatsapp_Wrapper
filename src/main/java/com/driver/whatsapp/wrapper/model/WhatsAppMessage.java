@@ -125,4 +125,107 @@ public class WhatsAppMessage {
         @JsonProperty("parameter")
         private String parameter;
     }
+    
+    // Interactive Button Message classes for InfoBip interactive button API
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @Builder
+    public static class InteractiveButtonMessage {
+        @JsonProperty("from")
+        private String from;
+        
+        @JsonProperty("to")
+        private String to;
+        
+        @JsonProperty("messageId")
+        private String messageId;
+        
+        @JsonProperty("content")
+        private InteractiveContent content;
+        
+        @JsonProperty("callbackData")
+        private String callbackData;
+        
+        @JsonProperty("notifyUrl")
+        private String notifyUrl;
+        
+        @JsonProperty("urlOptions")
+        private UrlOptions urlOptions;
+    }
+    
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @Builder
+    public static class InteractiveContent {
+        @JsonProperty("body")
+        private InteractiveBody body;
+        
+        @JsonProperty("action")
+        private InteractiveAction action;
+        
+        @JsonProperty("footer")
+        private InteractiveFooter footer;
+    }
+    
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @Builder
+    public static class InteractiveBody {
+        @JsonProperty("text")
+        private String text;
+    }
+    
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @Builder
+    public static class InteractiveAction {
+        @JsonProperty("buttons")
+        private List<InteractiveButton> buttons;
+    }
+    
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @Builder
+    public static class InteractiveButton {
+        @JsonProperty("type")
+        private String type;
+        
+        @JsonProperty("id")
+        private String id;
+        
+        @JsonProperty("title")
+        private String title;
+    }
+    
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @Builder
+    public static class InteractiveFooter {
+        @JsonProperty("text")
+        private String text;
+    }
+    
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @Builder
+    public static class UrlOptions {
+        @JsonProperty("shortenUrl")
+        private Boolean shortenUrl;
+        
+        @JsonProperty("trackClicks")
+        private Boolean trackClicks;
+        
+        @JsonProperty("trackingUrl")
+        private String trackingUrl;
+        
+        @JsonProperty("removeProtocol")
+        private Boolean removeProtocol;
+    }
 } 

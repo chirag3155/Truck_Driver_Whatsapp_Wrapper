@@ -308,7 +308,8 @@ public class OtrService {
                 flowType.getValue(), // Use dynamic flow type instead of hardcoded "whatsapp"
                 "whatsapp",
                 tenantId,
-                assistantId
+                assistantId,
+                request.getLang()
             );
             
         } catch (Exception e) {

@@ -17,6 +17,7 @@ import java.net.ConnectException;
 
 import java.util.Arrays;
 import java.util.List;
+import java.util.ArrayList;
 import jakarta.annotation.PostConstruct;
 
 @Slf4j
@@ -54,6 +55,19 @@ public class WhatsAppService {
             log.info("Text message sent to driver: {}", driverPhone);
         } catch (Exception e) {
             log.error("Error sending text message to driver: {}", e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Send interactive button message to driver
+     */
+    public void sendInteractiveButtonMessage(String driverPhone, String bodyText, List<String> buttonOptions, String orderId) {
+        try {
+            WhatsAppMessage.InteractiveButtonMessage message = buildInteractiveButtonMessage(driverPhone, bodyText, buttonOptions, orderId);
+            sendInteractiveMessage(message, "/whatsapp/1/message/interactive/buttons");
+            log.info("Interactive button message sent to driver: {} with {} buttons", driverPhone, buttonOptions.size());
+        } catch (Exception e) {
+            log.error("Error sending interactive button message to driver: {}", e.getMessage(), e);
         }
     }
 
@@ -231,5 +245,126 @@ public class WhatsAppService {
         // For now, just log the critical failure
         log.error("ALERT: Driver {} never received initial message for order {}. Conversation will not start!", 
                  driverPhone, orderId);
+    }
+
+    /**
+     * Build interactive button message
+     */
+    private WhatsAppMessage.InteractiveButtonMessage buildInteractiveButtonMessage(String driverPhone, String bodyText, List<String> buttonOptions, String orderId) {
+        // Build interactive buttons with incremental IDs
+        List<WhatsAppMessage.InteractiveButton> buttons = new ArrayList<>();
+        for (int i = 0; i < buttonOptions.size(); i++) { // No limit - send all buttons
+            WhatsAppMessage.InteractiveButton button = WhatsAppMessage.InteractiveButton.builder()
+                    .type("REPLY")
+                    .id(String.valueOf(i + 1)) // Incremental IDs: 1, 2, 3, 4, 5...
+                    .title(buttonOptions.get(i))
+                    .build();
+            buttons.add(button);
+        }
+
+        // Build interactive content
+        WhatsAppMessage.InteractiveBody body = WhatsAppMessage.InteractiveBody.builder()
+                .text(bodyText)
+                .build();
+
+        WhatsAppMessage.InteractiveAction action = WhatsAppMessage.InteractiveAction.builder()
+                .buttons(buttons)
+                .build();
+
+        WhatsAppMessage.InteractiveFooter footer = WhatsAppMessage.InteractiveFooter.builder()
+                .text("Choose") // Use "Choose" as footer text to satisfy InfoBip requirement
+                .build();
+
+        WhatsAppMessage.InteractiveContent content = WhatsAppMessage.InteractiveContent.builder()
+                .body(body)
+                .action(action)
+                .footer(footer)
+                .build();
+
+        // Build the complete message
+        WhatsAppMessage.InteractiveButtonMessage message = WhatsAppMessage.InteractiveButtonMessage.builder()
+                .from(whatsappFromNumber)
+                .to(driverPhone)
+                .messageId(orderId)
+                .content(content)
+                .callbackData("interactive_button_message")
+                .build();
+
+        return message;
+    }
+
+    /**
+     * Send interactive message to Infobip API
+     */
+    private void sendInteractiveMessage(WhatsAppMessage.InteractiveButtonMessage message, String endpoint) {
+        try {
+            String url = infobipApiUrl + endpoint;
+            
+            HttpHeaders headers = new HttpHeaders();
+            headers.set("Authorization", "App " + infobipApiKey);
+            headers.setContentType(MediaType.APPLICATION_JSON);
+
+            String jsonBody = objectMapper.writeValueAsString(message);
+            log.info("Sending interactive button message JSON: {}", jsonBody);
+            HttpEntity<String> entity = new HttpEntity<>(jsonBody, headers);
+
+            ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.POST, entity, String.class);
+            
+            if (response.getStatusCode().is2xxSuccessful()) {
+                log.info("Interactive button message sent successfully to {}: {}", message.getTo(), response.getBody());
+            } else {
+                log.error("WhatsApp API returned error for interactive message to {}: Status: {}, Body: {}", 
+                         message.getTo(), response.getStatusCode(), response.getBody());
+                handleInteractiveMessageFailure(message, "API Error: " + response.getStatusCode());
+            }
+            
+        } catch (ResourceAccessException e) {
+            Throwable cause = e.getMostSpecificCause();
+            if (cause instanceof ConnectException) {
+                log.error("Connection timeout while sending interactive WhatsApp message to: {}. Infobip API might be down or unreachable. Error: {}", 
+                    message.getTo(), cause.getMessage());
+            } else if (cause instanceof SocketTimeoutException) {
+                log.error("Read timeout while sending interactive WhatsApp message to: {}. Infobip API took too long to respond. Error: {}", 
+                    message.getTo(), cause.getMessage());
+            } else {
+                log.error("Network error while sending interactive WhatsApp message to: {}. Error: {}", 
+                    message.getTo(), e.getMessage());
+            }
+            handleInteractiveMessageFailure(message, "Connection failed: " + e.getMessage());
+            
+        } catch (HttpClientErrorException e) {
+            // 4xx errors
+            log.error("WhatsApp API client error for interactive message to {}: {} - {}", 
+                     message.getTo(), e.getStatusCode(), e.getResponseBodyAsString());
+            handleInteractiveMessageFailure(message, "Client error: " + e.getStatusCode());
+            
+        } catch (HttpServerErrorException e) {
+            // 5xx errors  
+            log.error("WhatsApp API server error for interactive message to {}: {} - {}", 
+                     message.getTo(), e.getStatusCode(), e.getResponseBodyAsString());
+            handleInteractiveMessageFailure(message, "Server error: " + e.getStatusCode());
+            
+        } catch (Exception e) {
+            log.error("Unexpected error sending interactive WhatsApp message to {}: {}", message.getTo(), e.getMessage(), e);
+            handleInteractiveMessageFailure(message, "Unexpected error: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * Handle interactive message failures
+     */
+    private void handleInteractiveMessageFailure(WhatsAppMessage.InteractiveButtonMessage message, String errorReason) {
+        log.warn("Interactive button message failed for driver {}: {} - Message: {}", 
+                message.getTo(), errorReason, message.getContent().getBody().getText());
+        
+        // TODO: Implement fallback mechanisms:
+        // 1. Store message for retry later
+        // 2. Send as simple text message as backup
+        // 3. Send SMS as backup
+        // 4. Alert operations team
+        
+        // For now, just log the failure
+        log.error("CRITICAL: Driver {} did not receive interactive message: '{}'", 
+                 message.getTo(), message.getContent().getBody().getText());
     }
 } 

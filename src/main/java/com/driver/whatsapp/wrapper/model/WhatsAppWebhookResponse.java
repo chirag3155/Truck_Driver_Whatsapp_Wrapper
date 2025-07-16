@@ -73,6 +73,13 @@ public class WhatsAppWebhookResponse {
         @JsonProperty("type")
         private String type;
         
+        // Interactive button reply fields
+        @JsonProperty("id")
+        private String id;
+        
+        @JsonProperty("title")
+        private String title;
+        
         // Explicit getters for document fields
         public String getUrl() {
             return url;

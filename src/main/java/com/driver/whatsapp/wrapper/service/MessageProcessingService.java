@@ -17,6 +17,9 @@ import java.time.format.DateTimeParseException;
 import java.util.Map;
 import java.util.HashMap;
 import java.util.Optional;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 
 @Slf4j
 @Service
@@ -34,7 +37,21 @@ public class MessageProcessingService {
     @Autowired
     private TransactionDetailRepository transactionDetailRepository;
 
-
+    /**
+     * Parsed response model for interactive button messages
+     */
+    public static class ParsedResponse {
+        private String bodyText;
+        private List<String> buttonOptions;
+        
+        public ParsedResponse(String bodyText, List<String> buttonOptions) {
+            this.bodyText = bodyText;
+            this.buttonOptions = buttonOptions;
+        }
+        
+        public String getBodyText() { return bodyText; }
+        public List<String> getButtonOptions() { return buttonOptions; }
+    }
 
     /**
      * Process incoming WhatsApp message from driver using Chat Module
@@ -63,11 +80,19 @@ public class MessageProcessingService {
             String conversationId = transactionDetail.get().getConversationId();
             String flowName = transactionDetail.get().getFlowName();
             String communicationMode = transactionDetail.get().getCommunicationMode();
+            String languageCode = transactionDetail.get().getDriverLang();
+
+            // Use driver's language or fallback to "en"
+            if (languageCode == null || languageCode.trim().isEmpty()) {
+                languageCode = "en";
+            } else {
+                languageCode = languageCode.toLowerCase();
+            }
 
             ApiAssistantMappingId mappingKey = new ApiAssistantMappingId();
             mappingKey.setApiName(flowName);
             mappingKey.setCommunicationMode(communicationMode);
-            mappingKey.setLang("en"); // Default language
+            mappingKey.setLang(languageCode);
             
             ApiAssistantMapping apiAssistantMapping = apiAssistantMappingRepository.findById(mappingKey)
                 .orElseThrow(() -> new RuntimeException("Api Assistant Mapping not found for flow: " + flowName + " and mode: " + communicationMode));
@@ -93,13 +118,32 @@ public class MessageProcessingService {
                     messageType,
                     platform,
                     tenantId,
-                    assistantId
+                    assistantId,
+                    languageCode
                 );
 
                 log.info("Received AI response for driver {}: {}", driverPhone, aiResponse);
 
-                // Send AI response back to driver via WhatsApp
-                whatsAppService.sendTextMessage(driverPhone, aiResponse, messageId);
+                // Check if response contains button options and send appropriate message type
+                if (containsButtonOptions(aiResponse)) {
+                    // Parse response to extract body text and button options
+                    ParsedResponse parsed = parseButtonResponse(aiResponse);
+                    
+                    log.info("Sending interactive button message to driver {} - Body: '{}', Buttons: {}", 
+                            driverPhone, parsed.getBodyText(), parsed.getButtonOptions());
+                    
+                    // Send as interactive button message
+                    whatsAppService.sendInteractiveButtonMessage(
+                        driverPhone, 
+                        parsed.getBodyText(), 
+                        parsed.getButtonOptions(), 
+                        messageId
+                    );
+                } else {
+                    // Send as regular text message (existing flow)
+                    log.info("Sending text message to driver {}: {}", driverPhone, aiResponse);
+                    whatsAppService.sendTextMessage(driverPhone, aiResponse, messageId);
+                }
                 
             } catch (Exception e) {
                 log.error("Error processing message from driver {}: {}", driverPhone, e.getMessage(), e);
@@ -119,6 +163,10 @@ public class MessageProcessingService {
      */
     private String getMessageContent(WhatsAppWebhookResponse.MessageContent message) {
         if (message != null) {
+            // For interactive button replies
+            if ("INTERACTIVE_BUTTON_REPLY".equalsIgnoreCase(message.getType()) && message.getTitle() != null) {
+                return message.getTitle();
+            }
             // For text messages
             if (message.getText() != null) {
                 return message.getText();
@@ -252,8 +300,67 @@ public class MessageProcessingService {
         return timestamp;
     }
 
+    /**
+     * Check if the response contains button options (multi-line with - prefixed options)
+     */
+    private boolean containsButtonOptions(String response) {
+        if (response == null || response.trim().isEmpty()) {
+            return false;
+        }
+        
+        // Check if response contains newline followed by dash-prefixed options
+        String[] lines = response.split("\n");
+        if (lines.length < 3) {
+            return false;
+        }
+        
+        // Check if any line after the first contains dash-prefixed options
+        for (int i = 1; i < lines.length; i++) {
+            String line = lines[i].trim();
+            if (line.startsWith("-") || line.matches("^\\s*-\\s+.+")) {
+                return true;
+            }
+        }
+        
+        return false;
+    }
 
+    /**
+     * Parse button response to extract body text and button options
+     * Example input: "Got it, Aditya. Can you please tell us the reason for the delay? \n - Traffic congestion\n - Truck breakdown\n - Documents or clearance delay\n - Other (please specify)"
+     * Output: body="Got it, Aditya. Can you please tell us the reason for the delay?", buttons=["Traffic congestion", "Truck breakdown", "Documents or clearance delay", "Other (please specify)"]
+     */
+    private ParsedResponse parseButtonResponse(String response) {
+        if (response == null || response.trim().isEmpty()) {
+            return new ParsedResponse(response, new ArrayList<>());
+        }
+        
+        String[] lines = response.split("\n");
+        List<String> bodyLines = new ArrayList<>();
+        List<String> buttonOptions = new ArrayList<>();
+        
+        for (String line : lines) {
+            String trimmedLine = line.trim();
+            
+            // If line starts with dash, it's a button option
+            if (trimmedLine.startsWith("-")) {
+                // Remove the dash and any leading/trailing whitespace
+                String buttonText = trimmedLine.replaceFirst("^-\\s*", "").trim();
+                if (!buttonText.isEmpty()) {
+                    buttonOptions.add(buttonText);
+                }
+            } else if (!trimmedLine.isEmpty()) {
+                // It's part of the body text
+                bodyLines.add(trimmedLine);
+            }
+        }
+        
+        // Join body lines with spaces
+        String bodyText = String.join(" ", bodyLines).trim();
+        
+        log.debug("Parsed response - Body: '{}', Buttons: {}", bodyText, buttonOptions);
+        
+        return new ParsedResponse(bodyText, buttonOptions);
+    } 
 
-
-
-} 
+}

@@ -14,6 +14,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import lombok.extern.slf4j.Slf4j;
 
 @Service
 @Slf4j
@@ -245,6 +246,65 @@ public class ConfigurationCacheService {
      */
     public static String getModuleName() {
         return staticModuleName;
+    }
+    
+    // ==================== LANGUAGE MAPPING STATIC METHODS ====================
+    
+    /**
+     * Get language name from language code - STATIC ACCESS
+     * @param languageCode The language code (e.g., "en", "ar", "tr", "hi")
+     * @return The language name (e.g., "English", "Arabic", "Turkish", "Hindi") or null if not found
+     */
+    public static String getLanguageName(String languageCode) {
+        if (languageCode == null || languageCode.trim().isEmpty()) {
+            log.debug("Null or empty language code provided");
+            return null;
+        }
+        return configurationCache.get(languageCode.toLowerCase());
+    }
+    
+    /**
+     * Get language name from language code with default fallback - STATIC ACCESS
+     * @param languageCode The language code (e.g., "en", "ar", "tr", "hi")
+     * @param defaultLanguageName Default language name to return if mapping not found
+     * @return The language name or the default value
+     */
+    public static String getLanguageName(String languageCode, String defaultLanguageName) {
+        String languageName = getLanguageName(languageCode);
+        if (languageName == null) {
+            log.warn("Language name not found for code: '{}', using default: '{}'", 
+                    languageCode != null ? languageCode : "null", 
+                    defaultLanguageName);
+            return defaultLanguageName;
+        }
+        log.info("Language name for code: {} is {}", languageCode, languageName);
+        return languageName;
+    }
+    
+    /**
+     * Get default language code from configuration - STATIC ACCESS
+     * @return The default language code (usually "en") or "en" as fallback
+     */
+    public static String getDefaultLanguageCode() {
+        return configurationCache.getOrDefault("default_language_id", "en");
+    }
+    
+    /**
+     * Get default language name - STATIC ACCESS
+     * @return The name of the default language (e.g., "English")
+     */
+    public static String getDefaultLanguageName() {
+        String defaultLangCode = getDefaultLanguageCode();
+        return getLanguageName(defaultLangCode, "English");
+    }
+    
+    /**
+     * Check if a language mapping exists - STATIC ACCESS
+     * @param languageCode The language code to check
+     * @return true if the language mapping exists, false otherwise
+     */
+    public static boolean hasLanguageMapping(String languageCode) {
+        return languageCode != null && configurationCache.containsKey(languageCode.toLowerCase());
     }
 
     /**

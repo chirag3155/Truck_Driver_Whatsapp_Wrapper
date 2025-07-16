@@ -57,6 +57,11 @@ public final class ConfigurationConstants {
      */
     public static final String FALLBACK_TEMPLATE_NAME = "fallback_template_name";
 
+    /**
+     * Default language ID when driver language is not specified (default: "en")
+     */
+    public static final String DEFAULT_LANGUAGE_ID = "default_language_id";
+
     // ==================== BUTTON TEXT CONFIGURATIONS ====================
     
     /**
