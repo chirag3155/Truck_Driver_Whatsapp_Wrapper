@@ -68,7 +68,7 @@ public class OtrService {
             String transactionId = request.getTransactionId();
             
             // Find existing transaction by transaction ID
-            TransactionDetail existingTransaction = findTransactionByTransactionId(transactionId);
+            TransactionDetail existingTransaction = findTransactionByTransactionId(transactionId,request.getPhoneNumber(),request.getOrderNumber(),request.getTruckNumber());
             
             // Validate transaction exists
             if (existingTransaction == null) {
@@ -109,12 +109,12 @@ public class OtrService {
     /**
      * Find transaction by transaction ID using efficient database query
      */
-    private TransactionDetail findTransactionByTransactionId(String transactionId) {
+    private TransactionDetail findTransactionByTransactionId(String transactionId,String phoneNumber,String orderNumber,String truckNumber) {
         try {
             log.info("🔍 Looking up transaction by transaction_id: {}", transactionId);
-            
+
             // Use efficient repository query to find transaction by transaction_id
-            Optional<TransactionDetail> transactionOpt = transactionDetailRepository.findByTransactionId(transactionId);
+            Optional<TransactionDetail> transactionOpt = transactionDetailRepository.findByTransactionIdAndPhoneNumberAndOrderNumberAndTruckNumber(transactionId,phoneNumber,orderNumber,truckNumber);
             
             if (transactionOpt.isPresent()) {
                 TransactionDetail transaction = transactionOpt.get();

@@ -38,7 +38,7 @@ public interface TransactionDetailRepository extends JpaRepository<TransactionDe
      * Find transaction details by transaction ID
      */
     @Query("SELECT td FROM TransactionDetail td WHERE td.transactionId = :transactionId")
-    Optional<TransactionDetail> findByTransactionId(@Param("transactionId") String transactionId);
+    List<TransactionDetail> findByTransactionId(@Param("transactionId") String transactionId);
     
     /**
      * Find all transactions within a date range (using orderDate field)
@@ -144,4 +144,17 @@ public interface TransactionDetailRepository extends JpaRepository<TransactionDe
      */
     @Query("SELECT td FROM TransactionDetail td WHERE td.transactionId = :transactionId AND td.phoneNumber = :phoneNumber")
     Optional<TransactionDetail> findByTransactionIdAndPhoneNumber(@Param("transactionId") String transactionId, @Param("phoneNumber") String phoneNumber);
+
+    /**
+     * Find transaction by transactionId, phoneNumber, orderNumber, and truckNumber
+     */
+    @Query("SELECT td FROM TransactionDetail td WHERE td.transactionId = :transactionId " +
+           "AND td.phoneNumber = :phoneNumber " +
+           "AND td.orderNumber = :orderNumber " +
+           "AND td.truckNumber = :truckNumber")
+    Optional<TransactionDetail> findByTransactionIdAndPhoneNumberAndOrderNumberAndTruckNumber(
+            @Param("transactionId") String transactionId,
+            @Param("phoneNumber") String phoneNumber,
+            @Param("orderNumber") String orderNumber,
+            @Param("truckNumber") String truckNumber);
 } 

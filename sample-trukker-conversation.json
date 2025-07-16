@@ -1,0 +1,72 @@
+{
+  "sessionId": "62af8819-e359-44fc-90fc-2619b0548ab7",
+  "tenantId": "IN_TRUKKER_EVA",
+  "assistantId": "1116",
+  "userInfo": null,
+  "conversationId": "CON202519712043376",
+  "conversationStartTime": null,
+  "connectionEstablishTime": null,
+  "connectionEstablish": false,
+  "channelInfo": null,
+  "requestInfo": null,
+  "conversation": [
+    {
+      "correlationId": null,
+      "userMessage": null,
+      "requestTime": null,
+      "responseTime": null,
+      "systemResponse": null,
+      "language": null,
+      "propsLlm": null,
+      "propsAsr": null,
+      "propsTts": null,
+      "analysis": null
+    },
+    {
+      "correlationId": null,
+      "userMessage": null,
+      "requestTime": null,
+      "responseTime": "2025-07-16T12:04:42.448",
+      "systemResponse": [
+        {
+          "sys_query_time": "2025-07-16T12:04:40",
+          "sys_response_time": "2025-07-16T12:04:42",
+          "sys_response": "Hi Demo STO Block, for your upcoming trip from Riyadh, Saudi Arabia to Dubai, United Arab Emirates scheduled on June 29, 2025, please confirm if you'll reach the loading point on time by 6:30 PM. You can reply with one of the following options or update directly via the TruKKer Partner app:\n\n- Yes, on time\n- On the way\n- No, there is a delay\n- Not loading this trip\n- Open in TruKKer Partner",
+          "first_chunk_time": 1499.96,
+          "llm_duration": 2176.0,
+          "llm_failure": {
+            "failure_code": null,
+            "failure_message": null
+          },
+          "tools": [],
+          "work_flow": {
+            "id": null,
+            "version": null,
+            "status": null,
+            "customAttributes": null
+          },
+          "input_tokens": 2158,
+          "output_tokens": 100,
+          "cached_tokens": 0,
+          "type": "System",
+          "real_agent_details": null
+        }
+      ],
+      "language": null,
+      "propsLlm": null,
+      "propsAsr": null,
+      "propsTts": null,
+      "analysis": null
+    }
+  ],
+  "conversationEndTime": null,
+  "conversationEndInfo": {
+    "type": null,
+    "reason": null
+  },
+  "conversationAnalysis": {
+    "languages": ["en"],
+    "summary": "The user provided an update about their order and route details for a trip from Riyadh to Dubai, while the assistant inquired about the user's on-time arrival, offering options for confirmation.",
+    "intent": "[trip confirmation]"
+  }
+} 

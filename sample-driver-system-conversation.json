@@ -1,0 +1,385 @@
+{
+  "sessionId": "driver-session-123456",
+  "tenantId": "IN_TRUKKER_EVA",
+  "assistantId": "1116",
+  "userInfo": {
+    "id": "driver-12345",
+    "name": "Ahmed Hassan",
+    "mobile": "+971555123456",
+    "email": "ahmed.hassan@driver.com"
+  },
+  "conversationId": "CONV-DRIVER-789012",
+  "conversationStartTime": "2025-01-17T10:30:00.000Z",
+  "connectionEstablishTime": "2025-01-17T10:29:58.500Z",
+  "connectionEstablish": true,
+  "channelInfo": {
+    "type": "chat",
+    "provider": "whatsapp",
+    "direction": "inbound",
+    "additionalInfo": null,
+    "protocol": "HTTP",
+    "interface_id": "whatsapp_business"
+  },
+  "requestInfo": {
+    "isp": "Etisalat",
+    "country": "AE",
+    "region": "Dubai",
+    "city": "Dubai",
+    "deviceInfo": "WhatsApp Business",
+    "ip_address": "85.92.145.123",
+    "network_type": "4G",
+    "msc_ip": null,
+    "short_code": null
+  },
+  "conversation": [
+    {
+      "correlationId": "1_Driver",
+      "userMessage": {
+        "content": "Hi, I'm at the pickup location for order TRK001234. Ready to load.",
+        "type": "text"
+      },
+      "requestTime": "2025-01-17T10:30:15.123Z",
+      "responseTime": "2025-01-17T10:30:17.456Z",
+      "systemResponse": [
+        {
+          "sys_query_time": "2025-01-17T10:30:15",
+          "sys_response_time": "2025-01-17T10:30:17",
+          "sys_response": "Hello Ahmed! 👋 Great to hear you're at the pickup location for order TRK001234. I can see your location. Please confirm:\n\n1. Are you at the correct pickup address: Al Qusais Industrial Area, Dubai?\n2. Have you contacted the shipper?\n3. Is the cargo ready for loading?\n\nPlease reply with 'YES' if everything is ready, or let me know if you need assistance.",
+          "first_chunk_time": 1200.5,
+          "llm_duration": 2333.0,
+          "llm_failure": {
+            "failure_code": null,
+            "failure_message": null
+          },
+          "tools": [],
+          "work_flow": {
+            "id": "driver_checkin_flow",
+            "version": "v2.1",
+            "status": "active",
+            "customAttributes": {
+              "order_id": "TRK001234",
+              "driver_location": "verified"
+            }
+          },
+          "input_tokens": 1250,
+          "output_tokens": 95,
+          "cached_tokens": 0,
+          "type": "System",
+          "real_agent_details": null
+        }
+      ],
+      "language": {
+        "language": "English (UAE)",
+        "code": "en-AE",
+        "region": "AE"
+      },
+      "propsLlm": {
+        "provider": "azure_openai",
+        "model": "gpt-4",
+        "version": "2024-02-15",
+        "requestTime": "2025-01-17T10:30:15.123Z",
+        "responseTime": "2025-01-17T10:30:17.456Z",
+        "temperature": 0.7
+      },
+      "propsAsr": null,
+      "propsTts": null,
+      "analysis": {
+        "sentiment": "positive",
+        "emotions": [
+          {
+            "confidence": 0.95
+          },
+          {
+            "readiness": 0.9
+          },
+          {
+            "professionalism": 0.85
+          }
+        ],
+        "purposeOfMessage": "Status Update",
+        "accuracy": 98.0,
+        "sentimentScore": 0.9,
+        "satisfactionScore": 90.0,
+        "moderation": {
+          "enabled": true
+        },
+        "additionalAttributes": {
+          "order_mentioned": true,
+          "location_confirmed": true
+        }
+      }
+    },
+    {
+      "correlationId": "2_Driver",
+      "userMessage": {
+        "content": "Yes, everything is ready. Cargo is loaded. Moving to delivery location now.",
+        "type": "text"
+      },
+      "requestTime": "2025-01-17T10:45:22.789Z",
+      "responseTime": "2025-01-17T10:45:25.012Z",
+      "systemResponse": [
+        {
+          "sys_query_time": "2025-01-17T10:45:22",
+          "sys_response_time": "2025-01-17T10:45:25",
+          "sys_response": "Excellent work, Ahmed! ✅ Cargo loading confirmed for order TRK001234.\n\n📍 Your delivery destination: Sharjah Industrial City\n⏰ Expected delivery time: 12:30 PM\n🛣️ Recommended route: E311 → E88\n\nI'll track your journey. Please drive safely and update me when you reach the delivery location. Need any assistance with directions?",
+          "first_chunk_time": 980.2,
+          "llm_duration": 2223.0,
+          "llm_failure": {
+            "failure_code": null,
+            "failure_message": null
+          },
+          "tools": [
+            {
+              "tool_name": "route_optimizer",
+              "execution_time": 450.0
+            },
+            {
+              "tool_name": "delivery_tracker",
+              "execution_time": 200.0
+            }
+          ],
+          "work_flow": {
+            "id": "delivery_tracking_flow",
+            "version": "v3.0",
+            "status": "active",
+            "customAttributes": {
+              "route_optimized": true,
+              "eta_calculated": true
+            }
+          },
+          "input_tokens": 980,
+          "output_tokens": 88,
+          "cached_tokens": 120,
+          "type": "System",
+          "real_agent_details": null
+        }
+      ],
+      "language": {
+        "language": "English (UAE)",
+        "code": "en-AE",
+        "region": "AE"
+      },
+      "propsLlm": {
+        "provider": "azure_openai",
+        "model": "gpt-4",
+        "version": "2024-02-15",
+        "requestTime": "2025-01-17T10:45:22.789Z",
+        "responseTime": "2025-01-17T10:45:25.012Z",
+        "temperature": 0.7
+      },
+      "propsAsr": null,
+      "propsTts": null,
+      "analysis": {
+        "sentiment": "positive",
+        "emotions": [
+          {
+            "satisfaction": 0.92
+          },
+          {
+            "efficiency": 0.88
+          },
+          {
+            "confidence": 0.90
+          }
+        ],
+        "purposeOfMessage": "Progress Update",
+        "accuracy": 96.0,
+        "sentimentScore": 0.88,
+        "satisfactionScore": 92.0,
+        "moderation": {
+          "enabled": true
+        },
+        "additionalAttributes": {
+          "loading_completed": true,
+          "ready_for_delivery": true
+        }
+      }
+    },
+    {
+      "correlationId": "3_Driver",
+      "userMessage": {
+        "content": "Reached delivery location. Customer not available. What should I do?",
+        "type": "text"
+      },
+      "requestTime": "2025-01-17T12:15:45.234Z",
+      "responseTime": "2025-01-17T12:15:48.567Z",
+      "systemResponse": [
+        {
+          "sys_query_time": "2025-01-17T12:15:45",
+          "sys_response_time": "2025-01-17T12:15:48",
+          "sys_response": "I understand the situation, Ahmed. Let me help you with this delivery issue. 📞\n\nHere's what we'll do:\n1. I'm calling the customer now to inform them you've arrived\n2. Standard waiting time is 15 minutes\n3. If customer doesn't arrive, we'll reschedule delivery\n\nPlease wait at the location. I'll update you within 5 minutes about the customer's availability. Stay safe! 🚛",
+          "first_chunk_time": 1100.8,
+          "llm_duration": 3234.0,
+          "llm_failure": {
+            "failure_code": null,
+            "failure_message": null
+          },
+          "tools": [
+            {
+              "tool_name": "customer_contact",
+              "execution_time": 1500.0
+            },
+            {
+              "tool_name": "delivery_policy_checker",
+              "execution_time": 300.0
+            }
+          ],
+          "work_flow": {
+            "id": "delivery_issue_resolution",
+            "version": "v2.5",
+            "status": "active",
+            "customAttributes": {
+              "issue_type": "customer_unavailable",
+              "escalation_level": 1
+            }
+          },
+          "input_tokens": 1150,
+          "output_tokens": 102,
+          "cached_tokens": 85,
+          "type": "System",
+          "real_agent_details": null
+        }
+      ],
+      "language": {
+        "language": "English (UAE)",
+        "code": "en-AE",
+        "region": "AE"
+      },
+      "propsLlm": {
+        "provider": "azure_openai",
+        "model": "gpt-4",
+        "version": "2024-02-15",
+        "requestTime": "2025-01-17T12:15:45.234Z",
+        "responseTime": "2025-01-17T12:15:48.567Z",
+        "temperature": 0.7
+      },
+      "propsAsr": null,
+      "propsTts": null,
+      "analysis": {
+        "sentiment": "concerned",
+        "emotions": [
+          {
+            "concern": 0.75
+          },
+          {
+            "seeking_guidance": 0.85
+          },
+          {
+            "professionalism": 0.90
+          }
+        ],
+        "purposeOfMessage": "Issue Report",
+        "accuracy": 94.0,
+        "sentimentScore": 0.65,
+        "satisfactionScore": 75.0,
+        "moderation": {
+          "enabled": true
+        },
+        "additionalAttributes": {
+          "delivery_issue": true,
+          "customer_unavailable": true
+        }
+      }
+    },
+    {
+      "correlationId": "4_Driver",
+      "userMessage": {
+        "content": "Customer arrived. Delivery completed successfully. Cargo unloaded.",
+        "type": "text"
+      },
+      "requestTime": "2025-01-17T12:25:12.345Z",
+      "responseTime": "2025-01-17T12:25:14.678Z",
+      "systemResponse": [
+        {
+          "sys_query_time": "2025-01-17T12:25:12",
+          "sys_response_time": "2025-01-17T12:25:14",
+          "sys_response": "Fantastic news, Ahmed! 🎉 Delivery completed successfully for order TRK001234.\n\n✅ Order Status: DELIVERED\n📋 Please confirm:\n- Delivery receipt signed?\n- Any damages to report?\n- Customer satisfaction rating?\n\nYour next assignment will be available shortly. Great job today! Your efficiency rating: ⭐⭐⭐⭐⭐",
+          "first_chunk_time": 890.3,
+          "llm_duration": 1942.0,
+          "llm_failure": {
+            "failure_code": null,
+            "failure_message": null
+          },
+          "tools": [
+            {
+              "tool_name": "order_completion",
+              "execution_time": 800.0
+            },
+            {
+              "tool_name": "driver_rating_update",
+              "execution_time": 250.0
+            }
+          ],
+          "work_flow": {
+            "id": "delivery_completion_flow",
+            "version": "v2.8",
+            "status": "completed",
+            "customAttributes": {
+              "delivery_successful": true,
+              "driver_performance": "excellent"
+            }
+          },
+          "input_tokens": 890,
+          "output_tokens": 78,
+          "cached_tokens": 95,
+          "type": "System",
+          "real_agent_details": null
+        }
+      ],
+      "language": {
+        "language": "English (UAE)",
+        "code": "en-AE",
+        "region": "AE"
+      },
+      "propsLlm": {
+        "provider": "azure_openai",
+        "model": "gpt-4",
+        "version": "2024-02-15",
+        "requestTime": "2025-01-17T12:25:12.345Z",
+        "responseTime": "2025-01-17T12:25:14.678Z",
+        "temperature": 0.7
+      },
+      "propsAsr": null,
+      "propsTts": null,
+      "analysis": {
+        "sentiment": "positive",
+        "emotions": [
+          {
+            "satisfaction": 0.95
+          },
+          {
+            "accomplishment": 0.92
+          },
+          {
+            "professionalism": 0.94
+          }
+        ],
+        "purposeOfMessage": "Completion Confirmation",
+        "accuracy": 99.0,
+        "sentimentScore": 0.95,
+        "satisfactionScore": 98.0,
+        "moderation": {
+          "enabled": true
+        },
+        "additionalAttributes": {
+          "delivery_completed": true,
+          "successful_outcome": true
+        }
+      }
+    }
+  ],
+  "conversationEndTime": "2025-01-17T12:27:30.000Z",
+  "conversationEndInfo": {
+    "type": "SYSTEM",
+    "reason": "Delivery Task Completed Successfully"
+  },
+  "conversationAnalysis": {
+    "languages": ["en"],
+    "summary": "Driver Ahmed successfully completed delivery order TRK001234 from Dubai to Sharjah. The conversation included check-in at pickup location, loading confirmation, delivery issue resolution (customer unavailable), and final successful delivery completion. Driver demonstrated professionalism throughout the process.",
+    "intent": "[delivery completion and tracking]",
+    "avgSatisfactionScore": 88.75,
+    "totalInteractions": 4,
+    "deliveryStatus": "completed",
+    "driverPerformance": "excellent"
+  }
+} 
