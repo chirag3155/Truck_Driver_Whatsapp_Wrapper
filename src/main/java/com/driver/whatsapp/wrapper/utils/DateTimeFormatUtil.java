@@ -22,6 +22,8 @@ public class DateTimeFormatUtil {
     @Value("${app.date.format.default:MMMM d'th' ha}")
     private String defaultDateFormat;
     
+    private static final DateTimeFormatter STANDARD_DATETIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+    
     /**
      * Format date/time using configurable format
      */
@@ -58,34 +60,42 @@ public class DateTimeFormatUtil {
      */
     public String formatDateTime(String dateTimeStr, String format) {
         try {
-            if (dateTimeStr == null || dateTimeStr.trim().isEmpty()) {
-                return "scheduled time";
-            }
-            
-            log.debug("🔍 Parsing datetime string: '{}'", dateTimeStr);
-            
-            // Parse the datetime string with multiple format support
             LocalDateTime dateTime = parseDateTime(dateTimeStr);
-            
-            log.debug("✅ Parsed datetime: {}", dateTime);
-            
             return formatDateTime(dateTime, format);
-            
         } catch (Exception e) {
-            log.warn("Error parsing/formatting datetime string '{}' with format '{}': {}", dateTimeStr, format, e.getMessage());
-            return dateTimeStr; // Return original if parsing fails
+            log.warn("Error formatting datetime string '{}' with format '{}': {}", dateTimeStr, format, e.getMessage());
+            return dateTimeStr;
         }
     }
     
     /**
-     * Parse datetime string with multiple format support
+     * Get ordinal suffix for day number (1st, 2nd, 3rd, etc.)
      */
+    private String getDayNumberSuffix(int day) {
+        if (day >= 11 && day <= 13) {
+            return "th";
+        }
+        switch (day % 10) {
+            case 1:  return "st";
+            case 2:  return "nd";
+            case 3:  return "rd";
+            default: return "th";
+        }
+    }
+    
     private LocalDateTime parseDateTime(String dateTimeStr) {
         // Remove any trailing 'Z' if present
         String cleanDateTimeStr = dateTimeStr.endsWith("Z") ? dateTimeStr.substring(0, dateTimeStr.length() - 1) : dateTimeStr;
         
         try {
-            // Try parsing with milliseconds first: "2025-07-07T07:59:06.446"
+            // Try parsing standard format with seconds: "yyyy-MM-dd HH:mm:ss"
+            try {
+                return LocalDateTime.parse(cleanDateTimeStr, STANDARD_DATETIME_FORMATTER);
+            } catch (DateTimeParseException e) {
+                // Continue to other formats if this fails
+            }
+            
+            // Try parsing with milliseconds: "2025-07-07T07:59:06.446"
             if (cleanDateTimeStr.contains(".")) {
                 // Remove milliseconds part
                 int dotIndex = cleanDateTimeStr.indexOf('.');
@@ -93,7 +103,7 @@ public class DateTimeFormatUtil {
                 return LocalDateTime.parse(withoutMillis);
             }
             
-            // Try parsing standard format: "2025-07-05T14:30:00"
+            // Try parsing standard ISO format: "2025-07-05T14:30:00"
             return LocalDateTime.parse(cleanDateTimeStr);
             
         } catch (DateTimeParseException e) {
@@ -134,34 +144,5 @@ public class DateTimeFormatUtil {
      */
     public String formatEtaTime(String dateTimeStr) {
         return formatDateTime(dateTimeStr, etaTimeFormat);
-    }
-    
-    /**
-     * Format date/time using default format
-     */
-    public String formatDefault(LocalDateTime dateTime) {
-        return formatDateTime(dateTime, defaultDateFormat);
-    }
-    
-    /**
-     * Format date/time from string using default format
-     */
-    public String formatDefault(String dateTimeStr) {
-        return formatDateTime(dateTimeStr, defaultDateFormat);
-    }
-    
-    /**
-     * Get day number suffix (st, nd, rd, th)
-     */
-    private String getDayNumberSuffix(int day) {
-        if (day >= 11 && day <= 13) {
-            return "th";
-        }
-        switch (day % 10) {
-            case 1: return "st";
-            case 2: return "nd";
-            case 3: return "rd";
-            default: return "th";
-        }
     }
 } 

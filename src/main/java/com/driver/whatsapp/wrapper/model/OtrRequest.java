@@ -37,10 +37,10 @@ public class OtrRequest {
     private String dropOffLocation;
     
     @JsonProperty("eta")
-    private LocalDateTime eta;
+    private String eta;
     
     @JsonProperty("orderDate")
-    private LocalDateTime orderDate;
+    private String orderDate;
     
     @JsonProperty("pickUpLocation")
     private String pickUpLocation;
@@ -80,11 +80,11 @@ public class OtrRequest {
     // private String transactionId;
 
     // Getters
-    public LocalDateTime getOrderDate() {
+    public String getOrderDate() {
         return orderDate;
     }
     
-    public LocalDateTime getEta() {
+    public String getEta() {
         return eta;
     }
 } 
