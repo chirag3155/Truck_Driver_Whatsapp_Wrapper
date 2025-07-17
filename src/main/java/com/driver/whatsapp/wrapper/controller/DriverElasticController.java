@@ -36,13 +36,13 @@ public class DriverElasticController {
         description = "Retrieves all conversations associated with a specific transaction ID from Elasticsearch"
     )
     public ResponseEntity<ApiGenericResponse<List<ConversationWithMetadataDTO>>> getConversationsByTransactionId(
-            @PathVariable String transactionId) {
+        @PathVariable String transactionId) {
         
         log.info("Received request to get conversations for transactionId: {}", transactionId);
         
-        try {
-            List<ConversationWithMetadataDTO> conversations = driverElasticService.getConversationsWithMetadataByTransactionId(transactionId);
-            
+    try {
+        List<ConversationWithMetadataDTO> conversations = driverElasticService.getConversationsWithMetadataByTransactionId(transactionId);
+
             log.info("Successfully retrieved {} conversations for transactionId: {}", 
                     conversations.size(), transactionId);
                     
@@ -52,15 +52,15 @@ public class DriverElasticController {
                 log.debug("Conversation {}: ID={}, Messages={}, Phone={}, Truck={}", 
                         i + 1, conv.getConversationId(), conv.getMessages().size(), 
                         conv.getPhoneNumber(), conv.getTruckNumber());
-            }
-            
-            return ResponseEntity.ok(ApiGenericResponse.<List<ConversationWithMetadataDTO>>builder()
-                    .status(200)
-                    .message("Conversations retrieved successfully")
-                    .data(conversations)
-                    .build());
-                    
-        } catch (IOException e) {
+        }
+
+        return ResponseEntity.ok(ApiGenericResponse.<List<ConversationWithMetadataDTO>>builder()
+                .status(200)
+                .message("Conversations retrieved successfully")
+                .data(conversations)
+                .build());
+
+    } catch (IOException e) {
             log.error("IOException while retrieving conversations for transactionId: {}. Error: {}", 
                     transactionId, e.getMessage(), e);
             return ResponseEntity.ok(ApiGenericResponse.<List<ConversationWithMetadataDTO>>builder()
@@ -71,20 +71,20 @@ public class DriverElasticController {
         } catch (Exception e) {
             log.error("Unexpected error while retrieving conversations for transactionId: {}. Error: {}", 
                     transactionId, e.getMessage(), e);
-            return ResponseEntity.ok(ApiGenericResponse.<List<ConversationWithMetadataDTO>>builder()
-                    .status(500)
+        return ResponseEntity.ok(ApiGenericResponse.<List<ConversationWithMetadataDTO>>builder()
+                .status(500)
                     .message("Internal server error: " + e.getMessage())
                     .data(null)
-                    .build());
-        }
+                .build());
     }
+}
 
-    @Operation(
+ @Operation(
         summary = "Create a new conversation",
         description = "Creates a new conversation document in Elasticsearch",
         security = { @SecurityRequirement(name = "bearerAuth") }
     )
-    @PostMapping
+  @PostMapping
     public ResponseEntity<ApiGenericResponse<JsonNode>> createConversation(
             @RequestHeader(name = "Authorization", required = false) String authToken,
             @RequestBody JsonNode conversation) {
@@ -92,18 +92,18 @@ public class DriverElasticController {
         log.info("Received request to create conversation");
         log.debug("Request payload size: {} characters", conversation.toString().length());
         
-        try {
-            // Extract user info for logging if available
-            String userId = "unknown";
-            String sessionId = "unknown";
+      try {
+          // Extract user info for logging if available
+          String userId = "unknown";
+          String sessionId = "unknown";
             String conversationId = "unknown";
-            
-            if (conversation != null) {
-                JsonNode userInfo = conversation.get("userInfo");
-                if (userInfo != null && userInfo.get("id") != null) {
-                    userId = userInfo.get("id").asText();
-                }
-                
+          
+          if (conversation != null) {
+              JsonNode userInfo = conversation.get("userInfo");
+              if (userInfo != null && userInfo.get("id") != null) {
+                  userId = userInfo.get("id").asText();
+              }
+              
                 JsonNode sessionNode = conversation.get("sessionId");
                 if (sessionNode != null) {
                     sessionId = sessionNode.asText();
@@ -112,13 +112,13 @@ public class DriverElasticController {
                 JsonNode convIdNode = conversation.get("conversationId");
                 if (convIdNode != null) {
                     conversationId = convIdNode.asText();
-                }
-            }
-            
+              }
+          }
+          
             log.info("Creating conversation - ID: {}, SessionID: {}, UserID: {}", 
                     conversationId, sessionId, userId);
 
-            JsonNode createdConversation = driverElasticService.createConversation(conversation);
+          JsonNode createdConversation = driverElasticService.createConversation(conversation);
 
             log.info("Successfully created conversation in Elasticsearch");
             log.debug("Created conversation response: {}", createdConversation.toString());
@@ -128,7 +128,7 @@ public class DriverElasticController {
                     .message("Conversation created successfully")
                     .data(createdConversation)
                     .build());
-        } catch (Exception e) {
+      } catch (Exception e) {
             log.error("Error creating conversation: {}", e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(ApiGenericResponse.<JsonNode>builder()
@@ -136,6 +136,6 @@ public class DriverElasticController {
                             .message("Failed to create conversation: " + e.getMessage())
                             .data(null)
                             .build());
-        }
-    }
+      }
+  }
 } 

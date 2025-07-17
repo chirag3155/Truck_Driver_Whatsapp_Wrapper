@@ -186,7 +186,7 @@ public class DriverElasticService {
                         ConversationMessageDto userMsg = ConversationMessageDto.builder()
                             .type("Driver")
                             .content(content)
-                            .timestamp(timestamp)
+                            .timestamp(normalizeTimestamp(timestamp))
                             .correlationId(correlationId)
                             .build();
                         messages.add(userMsg);
@@ -217,7 +217,7 @@ public class DriverElasticService {
                                 ConversationMessageDto systemMsg = ConversationMessageDto.builder()
                                     .type("Agent")
                                     .content(content)
-                                    .timestamp(timestamp)
+                                    .timestamp(normalizeTimestamp(timestamp))
                                     .correlationId(correlationId)
                                     .build();
                                 messages.add(systemMsg);
@@ -242,24 +242,23 @@ public class DriverElasticService {
         
         log.info("Before sorting: {} messages", messages.size());
         
-        // Sort messages by timestamp string (ISO format allows string comparison)
-        // But we need to handle the different timestamp formats properly
+        // Sort messages by timestamp using the new parsing method
         messages.sort((m1, m2) -> {
             try {
-                // Parse timestamps and compare as Instant objects for accurate sorting
-                Instant t1 = Instant.parse(m1.getTimestamp());
-                Instant t2 = Instant.parse(m2.getTimestamp());
+                Instant t1 = parseTimestamp(m1.getTimestamp());
+                Instant t2 = parseTimestamp(m2.getTimestamp());
                 return t1.compareTo(t2);
             } catch (Exception e) {
+                log.error("Failed to parse timestamps for sorting: {} vs {} - Error: {}", 
+                    m1.getTimestamp(), m2.getTimestamp(), e.getMessage());
                 // Fallback to string comparison if parsing fails
-                log.warn("Failed to parse timestamps for sorting: {} vs {}", m1.getTimestamp(), m2.getTimestamp());
                 return m1.getTimestamp().compareTo(m2.getTimestamp());
             }
         });
         
         log.info("Processed and sorted {} messages from conversation", messages.size());
         
-        // Log final message order for infoging
+        // Log final message order for debugging
         for (int i = 0; i < messages.size(); i++) {
             ConversationMessageDto msg = messages.get(i);
             log.info("Final order {}: {} - {} - {}", 
@@ -268,6 +267,76 @@ public class DriverElasticService {
         }
         
         return messages;
+    }
+
+    /**
+     * Parses a timestamp string into an Instant object, handling various formats
+     * @param timestamp The timestamp string to parse
+     * @return Instant object representing the timestamp
+     */
+    private Instant parseTimestamp(String timestamp) {
+        if (timestamp == null || timestamp.trim().isEmpty()) {
+            return Instant.now(); // Default to current time if timestamp is missing
+        }
+
+        try {
+            // If timestamp already has timezone information, parse directly
+            if (timestamp.endsWith("Z") || timestamp.contains("+") || timestamp.contains("-")) {
+                return Instant.parse(timestamp);
+            }
+
+            // Handle timestamps with milliseconds (e.g., 2025-07-17T05:33:48.413)
+            if (timestamp.matches(".*\\.\\d{3}$")) {
+                return Instant.parse(timestamp + "Z");
+            }
+
+            // Add milliseconds if missing and UTC marker
+            if (!timestamp.contains(".")) {
+                return Instant.parse(timestamp + ".000Z");
+            }
+
+            // Add UTC timezone marker if missing
+            return Instant.parse(timestamp + "Z");
+        } catch (Exception e) {
+            log.warn("Failed to parse timestamp: {} - Error: {}", timestamp, e.getMessage());
+            // Return current time as fallback
+            return Instant.now();
+        }
+    }
+
+    /**
+     * Normalizes a timestamp string to ensure it has UTC timezone information
+     * @param timestamp The timestamp string to normalize
+     * @return Normalized timestamp string with UTC timezone marker
+     */
+    private String normalizeTimestamp(String timestamp) {
+        if (timestamp == null || timestamp.trim().isEmpty()) {
+            return Instant.now().toString();
+        }
+
+        try {
+            // If timestamp already has timezone information, return as is
+            if (timestamp.endsWith("Z") || timestamp.contains("+") || timestamp.contains("-")) {
+                return timestamp;
+            }
+
+            // Handle timestamps with milliseconds (e.g., 2025-07-17T05:33:48.413)
+            if (timestamp.matches(".*\\.\\d{3}$")) {
+                return timestamp + "Z";
+            }
+
+            // Add milliseconds if missing and UTC marker
+            if (!timestamp.contains(".")) {
+                return timestamp + ".000Z";
+            }
+
+            // Add UTC timezone marker if missing
+            return timestamp + "Z";
+        } catch (Exception e) {
+            log.warn("Failed to normalize timestamp: {} - Error: {}", timestamp, e.getMessage());
+            // Return current time as fallback
+            return Instant.now().toString();
+        }
     }
 
     private ConversationMessageDto buildUserMessage(JsonNode conversationEntry, JsonNode rootNode) {
