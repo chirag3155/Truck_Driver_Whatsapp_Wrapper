@@ -17,5 +17,9 @@ public class ConversationWithMetadataDTO {
     private String truckNumber;
     private String orderNumber;
     private String transactionId;
+    private String communicationMode;
+    private String summary;
+    private String intent;
     private List<ConversationMessageDto> messages;
+
 }

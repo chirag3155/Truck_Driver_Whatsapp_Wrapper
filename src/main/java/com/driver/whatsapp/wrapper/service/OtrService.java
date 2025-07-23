@@ -447,14 +447,20 @@ public class OtrService {
             String lang = request.getLang() != null ? request.getLang() : "en";
             
             // Get template name based on flow type
-            String templateName = getTemplateNameForFlow(flowType);
+            // String templateName = getTemplateNameForFlow(flowType);
+
+            // String templateName = apiTemplateMappingRepository.findByApiNameAndLang(flowType.getValue(), lang);
             
             // Get template from database - throw exception if not found
             ApiTemplateMapping apiTemplateMapping = apiTemplateMappingRepository
-                .findByApiNameAndLangAndTemplateName(flowType.getValue(), lang, templateName)
+                .findByApiNameAndLang(flowType.getValue(), lang)
                 .orElseThrow(() -> new RuntimeException(
-                    String.format("Template not found in database for flow: %s, lang: %s, template: %s", 
-                        flowType.getValue(), lang, templateName)));
+                    String.format("Template not found in database for flow: %s, lang: %s",
+                        flowType.getValue(), lang)));
+
+            String templateName = apiTemplateMapping.getId().getTemplateName();
+
+            log.info("📋 Using template name: {} for flow: {}", templateName, flowType.getValue());
             
             // Check if template is active
             if (!apiTemplateMapping.isActive()) {
@@ -713,22 +719,22 @@ public class OtrService {
     /**
      * Get template name based on flow type
      */
-    private String getTemplateNameForFlow(FlowType flowType) {
-        switch (flowType) {
-            case OTR:
-                return "ai_otr_en";
-            case LOADING_CONFIRMATION:
-                return "ai_loading_confirmation";
-            case DOC_REMINDER:
-                return "ai_pod_reminder";
-            case REMINDER:
-                return "ai_reminder_en";
-            case STATUS_FOLLOW_UP:
-                return "ai_generic_connect_status_update_cross_border";
-            default:
-                return "ai_generic_connect_status_update_cross_border";
-        }
-    }
+    // private String getTemplateNameForFlow(FlowType flowType) {
+    //     switch (flowType) {
+    //         case OTR:
+    //             return "ai_otr_en";
+    //         case LOADING_CONFIRMATION:
+    //             return "ai_loading_confirmation";
+    //         case DOC_REMINDER:
+    //             return "ai_pod_reminder";
+    //         case REMINDER:
+    //             return "ai_reminder_en";
+    //         case STATUS_FOLLOW_UP:
+    //             return "ai_generic_connect_status_update_cross_border";
+    //         default:
+    //             return "ai_generic_connect_status_update_cross_border";
+    //     }
+    // }
     
 
     
@@ -752,17 +758,17 @@ public class OtrService {
             // Get language from request, default to "en" if not provided
             String lang = request.getLang() != null ? request.getLang() : "en";
             log.info("📝 Using language: {} for flow: {}", lang, flowType.getValue());
-            
-            // Get template name based on flow type
-            String templateName = getTemplateNameForFlow(flowType);
-            log.info("📋 Using template name: {} for flow: {}", templateName, flowType.getValue());
-            
-            // Get template from database - throw exception if not found
+
+            // Get template from database based on flow type and language
             ApiTemplateMapping apiTemplateMapping = apiTemplateMappingRepository
-                .findByApiNameAndLangAndTemplateName(flowType.getValue(), lang, templateName)
+                .findByApiNameAndLang(flowType.getValue(), lang)
                 .orElseThrow(() -> new RuntimeException(
-                    String.format("Template not found in database for flow: %s, lang: %s, template: %s", 
-                        flowType.getValue(), lang, templateName)));
+                    String.format("Template not found in database for flow: %s, lang: %s",
+                        flowType.getValue(), lang)));
+
+            String templateName = apiTemplateMapping.getId().getTemplateName();
+
+            log.info("📋 Using template name: {} for flow: {}", templateName, flowType.getValue());
             
             // Check if template is active
             if (!apiTemplateMapping.isActive()) {

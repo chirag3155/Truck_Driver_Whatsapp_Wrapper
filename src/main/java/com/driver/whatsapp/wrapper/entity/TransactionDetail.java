@@ -4,6 +4,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
+import java.time.Instant;
 
 import jakarta.persistence.*;
 import java.io.Serializable;
@@ -27,6 +28,7 @@ import org.hibernate.annotations.CreationTimestamp;
 @Builder
 public class TransactionDetail {
 
+   
     /**
      * Primary key component - driver's phone number.
      */
@@ -89,13 +91,13 @@ public class TransactionDetail {
      * Timestamp when the transaction was created (auto-set by DB).
      */
     @CreationTimestamp
-    @Column(name = "transaction_timestamp", nullable = false)
+    @Column(name = "transaction_timestamp", nullable = false, columnDefinition = "DATETIME(0)")
     private LocalDateTime transactionTimestamp;
 
     /**
      * Timestamp automatically updated before the record is updated.
      */
-    @Column(name = "updated_timestamp")
+    @Column(name = "updated_timestamp", columnDefinition = "DATETIME(0)")
     private LocalDateTime updatedTimestamp;
 
     /**
@@ -137,20 +139,14 @@ public class TransactionDetail {
     /**
      * Original date and time when the order was created.
      */
-    @Column(name = "order_date", nullable = false)
-    private LocalDateTime orderDate;
+    @Column(name = "order_date", nullable = false, columnDefinition = "DATETIME(3)")
+    private Instant orderDate;
 
     /**
      * Estimated time of arrival (ETA).
      */
-    @Column(name = "eta_time", nullable = false)
-    private LocalDateTime etaTime;
-
-    /**
-     * New ETA in case of changes or delays (optional).
-     */
-    @Column(name = "new_eta", nullable = true)
-    private LocalDateTime newEta;
+    @Column(name = "eta_time", nullable = false, columnDefinition = "DATETIME(3)")
+    private Instant etaTime;
 
     /**
      * Number of Trips (optional).
@@ -189,6 +185,14 @@ public class TransactionDetail {
     private String optParam1;
 
     /**
+     * The number of retrial attempts made for this transaction.
+     * Initialized to 0 by default.
+     */
+    @Column(name = "retrial_attempts", nullable = false)
+    @Builder.Default
+    private Integer retrialAttempts = 0;
+
+    /**
      * Hook method triggered before persisting (insert).
      * Used to ensure timestamps are set.
      */
@@ -205,5 +209,6 @@ public class TransactionDetail {
     protected void onUpdate() {
         updatedTimestamp = LocalDateTime.now();
     }
+
 
 }

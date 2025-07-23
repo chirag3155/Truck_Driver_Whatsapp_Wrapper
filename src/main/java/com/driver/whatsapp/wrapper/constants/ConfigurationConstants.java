@@ -321,4 +321,15 @@ public final class ConfigurationConstants {
     // Default Timeout Values (in milliseconds)
     public static final String DEFAULT_CONNECT_TIMEOUT = "30000"; // 30 seconds
     public static final String DEFAULT_READ_TIMEOUT = "30000";    // 30 seconds
+
+    // ==================== DOCUMENT AGGREGATION SETTINGS ====================
+    /**
+     * Time window (in milliseconds) to aggregate consecutive document/media messages from the driver before sending them to chat-module. (default: 15000)
+     */
+    public static final String DOCUMENT_AGGREGATION_WINDOW_MS = "document_aggregation_window_ms";
+
+    /**
+     * Back-off (in milliseconds) to wait before retrying a flush if a chat-module call for the same driver is still in-flight. (default: 2000)
+     */
+    public static final String DOCUMENT_FLUSH_BACKOFF_MS = "document_flush_backoff_ms";
 } 

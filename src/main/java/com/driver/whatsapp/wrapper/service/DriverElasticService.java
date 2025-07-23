@@ -11,6 +11,7 @@ import com.driver.whatsapp.wrapper.dto.ConversationMessageDto;
 import com.driver.whatsapp.wrapper.dto.ConversationWithMetadataDTO;
 import com.driver.whatsapp.wrapper.entity.TransactionDetail;
 import com.driver.whatsapp.wrapper.repository.TransactionDetailRepository;
+import com.driver.whatsapp.wrapper.repository.TransactionHistoryRepository;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
@@ -27,6 +28,7 @@ import java.util.*;
 import java.util.stream.Collectors;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.util.Objects;
+import com.driver.whatsapp.wrapper.entity.TransactionHistory;
 
 @Service
 @Slf4j
@@ -34,6 +36,7 @@ public class DriverElasticService {
 
     private final Optional<ElasticsearchClient> esClient;
     private final TransactionDetailRepository transactionDetailRepository;
+    private final TransactionHistoryRepository transactionHistoryRepository;
     private final ObjectMapper objectMapper;
 
     @Value("${elasticsearch.index.name}")
@@ -42,9 +45,11 @@ public class DriverElasticService {
     @Autowired
     public DriverElasticService(@Lazy Optional<ElasticsearchClient> esClient,
                               TransactionDetailRepository transactionDetailRepository,
+                              TransactionHistoryRepository transactionHistoryRepository,
                               ObjectMapper objectMapper) {
         this.esClient = esClient;
         this.transactionDetailRepository = transactionDetailRepository;
+        this.transactionHistoryRepository = transactionHistoryRepository;
         this.objectMapper = objectMapper;
     }
 
@@ -54,37 +59,145 @@ public class DriverElasticService {
             return List.of();
         }
 
-        // Get list of transactions for this transaction ID
-        List<TransactionDetail> transactions = transactionDetailRepository.findByTransactionId(transactionId);
-        
-        if (transactions.isEmpty()) {
-            log.warn("No transactions found for transaction ID: {}", transactionId);
+        // Fetch distinct conversation IDs from transaction_history table
+        List<String> conversationIds = transactionHistoryRepository
+                .findDistinctConversationIdsByTransactionId(transactionId);
+
+        if (conversationIds.isEmpty()) {
+            log.warn("No conversationIds found for transaction ID: {}", transactionId);
             return List.of();
         }
 
         List<ConversationWithMetadataDTO> result = new ArrayList<>();
 
-        // For each transaction, get its conversation messages
-        for (TransactionDetail transaction : transactions) {
-            String conversationId = transaction.getConversationId();
-            log.info("Conversation ID: {}", conversationId);
-            if (conversationId != null) {
-                List<ConversationMessageDto> messages = getConversationMessages(conversationId);
-                
-                if (!messages.isEmpty()) {
-                    result.add(ConversationWithMetadataDTO.builder()
-                            .conversationId(conversationId)
-                            .transactionId(transaction.getTransactionId())
-                            .phoneNumber(transaction.getPhoneNumber())
-                            .orderNumber(transaction.getOrderNumber())
-                            .truckNumber(transaction.getTruckNumber())
-                            .messages(messages)
-                            .build());
+        for (String conversationId : conversationIds) {
+            log.info("Processing conversation ID: {}", conversationId);
+
+            if (conversationId == null) {
+                continue;
+            }
+
+            List<ConversationMessageDto> messages = getConversationMessages(conversationId);
+            Map<String, String> meta = getSummaryAndIntent(conversationId);
+            String summary = meta.getOrDefault("summary", null);
+            String intent  = meta.getOrDefault("intent", null);
+
+            // Attempt to get additional metadata from transaction_detail table (optional)
+            String phoneNumber = null;
+            String orderNumber = null;
+            String truckNumber = null;
+            String communicationMode = null;
+
+            
+        // 1. Look up TransactionHistory by conversationId
+        Optional<TransactionHistory> historyOpt = transactionHistoryRepository
+                .findFirstByConversationIdOrderByTransactionTimestampDesc(conversationId);
+
+        if (historyOpt.isPresent()) {
+            TransactionHistory history = historyOpt.get();
+            transactionId = history.getTransactionId();
+            phoneNumber   = history.getPhoneNumber();
+            truckNumber   = history.getTruckNumber();
+            communicationMode = history.getCommunicationMode();
+        }
+
+        // 2. If we found a transactionId, try to fetch TransactionDetail to get
+        //    orderNumber (and override any missing/null values)
+        if (transactionId != null) {
+            Optional<TransactionDetail> tdOpt = transactionDetailRepository.findByTransactionId(transactionId);
+            if (tdOpt.isPresent()) {
+                TransactionDetail td = tdOpt.get();
+                if (phoneNumber == null) {
+                    phoneNumber = td.getPhoneNumber();
                 }
+                if (truckNumber == null) {
+                    truckNumber = td.getTruckNumber();
+                }
+                orderNumber = td.getOrderNumber();
+            }
+        }
+
+            if (!messages.isEmpty()) {
+                result.add(ConversationWithMetadataDTO.builder()
+                        .conversationId(conversationId)
+                        .transactionId(transactionId)
+                        .phoneNumber(phoneNumber)
+                        .orderNumber(orderNumber)
+                        .truckNumber(truckNumber)
+                        .communicationMode(communicationMode)
+                        .summary(summary)
+                        .intent(intent)
+                        .messages(messages)
+                        .build());
             }
         }
 
         return result;
+    }
+
+    public ConversationWithMetadataDTO getConversationWithMetadataByConversationId(String conversationId) throws IOException {
+        if (conversationId == null || conversationId.trim().isEmpty()) {
+            log.warn("conversationId is null or empty");
+            return null;
+        }
+
+        // Fetch messages for the conversation
+        List<ConversationMessageDto> messages = getConversationMessages(conversationId);
+
+        // Fetch summary & intent if available
+        Map<String, String> meta = getSummaryAndIntent(conversationId);
+        String summary = meta.getOrDefault("summary", null);
+        String intent  = meta.getOrDefault("intent", null);
+
+        // ---------------------------------------------------------------------
+        //  Fetch additional metadata using TransactionHistory first, then
+        //  enrich using TransactionDetail (based on the transactionId we find)
+        // ---------------------------------------------------------------------
+        String phoneNumber = null;
+        String orderNumber = null;
+        String truckNumber = null;
+        String transactionId = null;
+        String communicationMode = null;
+
+        // 1. Look up TransactionHistory by conversationId
+        Optional<TransactionHistory> historyOpt = transactionHistoryRepository
+                .findFirstByConversationIdOrderByTransactionTimestampDesc(conversationId);
+
+        if (historyOpt.isPresent()) {
+            TransactionHistory history = historyOpt.get();
+            transactionId = history.getTransactionId();
+            phoneNumber   = history.getPhoneNumber();
+            truckNumber   = history.getTruckNumber();
+            communicationMode = history.getCommunicationMode();
+        }
+
+        // 2. If we found a transactionId, try to fetch TransactionDetail to get
+        //    orderNumber (and override any missing/null values)
+        if (transactionId != null) {
+            Optional<TransactionDetail> tdOpt = transactionDetailRepository.findByTransactionId(transactionId);
+            if (tdOpt.isPresent()) {
+                TransactionDetail td = tdOpt.get();
+                if (phoneNumber == null) {
+                    phoneNumber = td.getPhoneNumber();
+                }
+                if (truckNumber == null) {
+                    truckNumber = td.getTruckNumber();
+                }
+                orderNumber = td.getOrderNumber();
+            }
+        }
+
+        return ConversationWithMetadataDTO.builder()
+                .conversationId(conversationId)
+                .transactionId(transactionId)
+                .phoneNumber(phoneNumber)
+                .orderNumber(orderNumber)
+                .truckNumber(truckNumber)
+                .communicationMode(communicationMode)
+                .summary(summary)
+                .intent(intent)
+                .messages(messages)
+                .build();
     }
 
     private List<ConversationMessageDto> getConversationMessages(String conversationId) throws IOException {
@@ -187,7 +300,6 @@ public class DriverElasticService {
                             .type("Driver")
                             .content(content)
                             .timestamp(normalizeTimestamp(timestamp))
-                            .correlationId(correlationId)
                             .build();
                         messages.add(userMsg);
                         log.info("Added user message: {}, correlationId: {}", content, correlationId);
@@ -218,7 +330,6 @@ public class DriverElasticService {
                                     .type("Agent")
                                     .content(content)
                                     .timestamp(normalizeTimestamp(timestamp))
-                                    .correlationId(correlationId)
                                     .build();
                                 messages.add(systemMsg);
                                 log.info("Added system response: correlationId: {}", correlationId);
@@ -280,23 +391,8 @@ public class DriverElasticService {
         }
 
         try {
-            // If timestamp already has timezone information, parse directly
-            if (timestamp.endsWith("Z") || timestamp.contains("+") || timestamp.contains("-")) {
-                return Instant.parse(timestamp);
-            }
-
-            // Handle timestamps with milliseconds (e.g., 2025-07-17T05:33:48.413)
-            if (timestamp.matches(".*\\.\\d{3}$")) {
-                return Instant.parse(timestamp + "Z");
-            }
-
-            // Add milliseconds if missing and UTC marker
-            if (!timestamp.contains(".")) {
-                return Instant.parse(timestamp + ".000Z");
-            }
-
-            // Add UTC timezone marker if missing
-            return Instant.parse(timestamp + "Z");
+            String normalized = ensureUtc(timestamp);
+            return Instant.parse(normalized);
         } catch (Exception e) {
             log.warn("Failed to parse timestamp: {} - Error: {}", timestamp, e.getMessage());
             // Return current time as fallback
@@ -305,38 +401,46 @@ public class DriverElasticService {
     }
 
     /**
-     * Normalizes a timestamp string to ensure it has UTC timezone information
-     * @param timestamp The timestamp string to normalize
-     * @return Normalized timestamp string with UTC timezone marker
+     * Ensures the incoming timestamp string ends with an explicit UTC offset so that
+     * Instant.parse(..) can consume it. Handles:
+     *  - yyyy-MM-ddTHH:mm:ss        -> + ".000Z"
+     *  - yyyy-MM-ddTHH:mm:ss.SSS    -> + "Z"
+     *  - yyyy-MM-ddTHH:mm:ss+05:00  -> unchanged
+     *  - yyyy-MM-ddTHH:mm:ssZ       -> unchanged
+     */
+    private String ensureUtc(String ts) {
+        if (ts == null || ts.isBlank()) {
+            return Instant.now().toString();
+        }
+
+        // Already has explicit zone (Z or +hh:mm / -hh:mm or +hhmm)
+        if (ts.endsWith("Z") || ts.matches(".*[+-]\\d{2}:?\\d{2}$")) {
+            // Add colon in offset if missing (e.g., +0500 -> +05:00) because Instant.parse needs colon
+            if (ts.matches(".*[+-]\\d{4}$")) {
+                return ts.substring(0, ts.length() - 5) + ts.substring(ts.length() - 5, ts.length() - 3) + ":" + ts.substring(ts.length() - 3);
+            }
+            return ts;
+        }
+
+        // Missing timezone but has milliseconds
+        if (ts.matches(".*\\.\\d{3}$")) {
+            return ts + "Z";
+        }
+
+        // Missing both milliseconds and zone
+        if (!ts.contains(".")) {
+            return ts + ".000Z";
+        }
+
+        // Fallback just append Z
+        return ts + "Z";
+    }
+    /**
+     * Normalises a timestamp string so that it always ends with an explicit UTC
+     * designator and (if necessary) milliseconds. No parsing, just string ops.
      */
     private String normalizeTimestamp(String timestamp) {
-        if (timestamp == null || timestamp.trim().isEmpty()) {
-            return Instant.now().toString();
-        }
-
-        try {
-            // If timestamp already has timezone information, return as is
-            if (timestamp.endsWith("Z") || timestamp.contains("+") || timestamp.contains("-")) {
-                return timestamp;
-            }
-
-            // Handle timestamps with milliseconds (e.g., 2025-07-17T05:33:48.413)
-            if (timestamp.matches(".*\\.\\d{3}$")) {
-                return timestamp + "Z";
-            }
-
-            // Add milliseconds if missing and UTC marker
-            if (!timestamp.contains(".")) {
-                return timestamp + ".000Z";
-            }
-
-            // Add UTC timezone marker if missing
-            return timestamp + "Z";
-        } catch (Exception e) {
-            log.warn("Failed to normalize timestamp: {} - Error: {}", timestamp, e.getMessage());
-            // Return current time as fallback
-            return Instant.now().toString();
-        }
+        return ensureUtc(timestamp);
     }
 
     private ConversationMessageDto buildUserMessage(JsonNode conversationEntry, JsonNode rootNode) {
@@ -514,5 +618,34 @@ public class DriverElasticService {
             log.error("Error creating conversation: {}", e.getMessage());
             throw new RuntimeException("Failed to create conversation: " + e.getMessage());
         }
+    }
+
+    /**
+     * Fetches summary and intent fields from conversationAnalysis for a given conversationId.
+     * Lightweight: size=1 query.
+     */
+    private Map<String, String> getSummaryAndIntent(String conversationId) throws IOException {
+        Map<String, String> meta = new HashMap<>();
+        if (esClient.isEmpty()) return meta;
+
+        SearchRequest req = new SearchRequest.Builder()
+            .index(indexName + "*")
+            .ignoreUnavailable(true)
+            .allowNoIndices(true)
+            .size(1)
+            .query(QueryBuilders.term(t -> t.field("conversationId.keyword").value(conversationId)))
+            .build();
+
+        SearchResponse<JsonNode> resp = esClient.get().search(req, JsonNode.class);
+        if (resp.hits().total() == null || resp.hits().total().value() == 0) return meta;
+
+        JsonNode source = resp.hits().hits().get(0).source();
+        if (source == null) return meta;
+        JsonNode analysis = source.path("conversationAnalysis");
+        if (!analysis.isMissingNode()) {
+            if (analysis.has("summary")) meta.put("summary", analysis.get("summary").asText(null));
+            if (analysis.has("intent")) meta.put("intent", analysis.get("intent").asText(null));
+        }
+        return meta;
     }
 } 

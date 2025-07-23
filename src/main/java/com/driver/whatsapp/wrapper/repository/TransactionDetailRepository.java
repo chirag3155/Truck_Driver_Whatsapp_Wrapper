@@ -38,7 +38,7 @@ public interface TransactionDetailRepository extends JpaRepository<TransactionDe
      * Find transaction details by transaction ID
      */
     @Query("SELECT td FROM TransactionDetail td WHERE td.transactionId = :transactionId")
-    List<TransactionDetail> findByTransactionId(@Param("transactionId") String transactionId);
+    Optional<TransactionDetail> findByTransactionId(@Param("transactionId") String transactionId);
     
     /**
      * Find all transactions within a date range (using orderDate field)

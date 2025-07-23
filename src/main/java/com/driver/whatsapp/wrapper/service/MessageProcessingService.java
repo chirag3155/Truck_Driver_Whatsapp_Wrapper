@@ -6,6 +6,7 @@ import com.driver.whatsapp.wrapper.repository.TransactionDetailRepository;
 import com.driver.whatsapp.wrapper.entity.ApiAssistantMapping;
 import com.driver.whatsapp.wrapper.entity.ApiAssistantMappingId;
 import com.driver.whatsapp.wrapper.entity.TransactionDetail;
+import com.driver.whatsapp.wrapper.service.DocumentAggregationService.DriverMeta;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -37,6 +38,9 @@ public class MessageProcessingService {
     @Autowired
     private TransactionDetailRepository transactionDetailRepository;
 
+    @Autowired
+    private DocumentAggregationService documentAggregationService;
+
     /**
      * Parsed response model for interactive button messages
      */
@@ -64,6 +68,11 @@ public class MessageProcessingService {
             String driverName = getContactName(result.getContact());
             String messageType = getMessageType(result.getMessage());
             String platform = getPlatform(result.getIntegrationType());
+
+            // Determine if the incoming message carries a media/document URL
+            boolean hasUrl = result.getMessage() != null
+                    && result.getMessage().getUrl() != null
+                    && !result.getMessage().getUrl().trim().isEmpty();
             long timestamp = parseReceivedAtTimestamp(result.getReceivedAt());
             
             log.info("Processing message from driver: {} ({}), Content: '{}', Type: {}, Platform: {}, Timestamp: {}", 
@@ -106,52 +115,85 @@ public class MessageProcessingService {
                 return;
             }
 
-            try {
-                // Send message to chat module and get AI response
-                String aiResponse = chatModuleService.sendMessageToChatModuleWithConfig(
+            /* ---------------- Batching / Aggregation Logic ---------------- */
+            boolean batchActive = documentAggregationService.isQueueActive(driverPhone);
+
+            // If the message contains any media URL (document/image/audio/video) OR a batch is already active → enqueue
+            if (hasUrl || batchActive) {
+                // Add to current batch (or start a new one) and return.
+                DriverMeta meta = new DriverMeta(
                     conversationId,
-                    driverPhone, 
+                    driverPhone,
                     driverName,
-                    messageContent, 
-                    messageId, 
-                    timestamp,
-                    messageType,
-                    platform,
                     tenantId,
                     assistantId,
-                    languageCode
+                    languageCode,
+                    platform
                 );
-
-                log.info("Received AI response for driver {}: {}", driverPhone, aiResponse);
-
-                // Check if response contains button options and send appropriate message type
-                if (containsButtonOptions(aiResponse)) {
-                    // Parse response to extract body text and button options
-                    ParsedResponse parsed = parseButtonResponse(aiResponse);
-                    
-                    log.info("Sending interactive button message to driver {} - Body: '{}', Buttons: {}", 
-                            driverPhone, parsed.getBodyText(), parsed.getButtonOptions());
-                    
-                    // Send as interactive button message
-                    whatsAppService.sendInteractiveButtonMessage(
-                        driverPhone, 
-                        parsed.getBodyText(), 
-                        parsed.getButtonOptions(), 
-                        messageId
-                    );
-                } else {
-                    // Send as regular text message (existing flow)
-                    log.info("Sending text message to driver {}: {}", driverPhone, aiResponse);
-                    whatsAppService.sendTextMessage(driverPhone, aiResponse, messageId);
-                }
-                
-            } catch (Exception e) {
-                log.error("Error processing message from driver {}: {}", driverPhone, e.getMessage(), e);
-                
-                // Send fallback response
-                String fallbackResponse = "I'm having trouble processing your message right now. Please try again or contact support if the issue persists.";
-                whatsAppService.sendTextMessage(driverPhone, fallbackResponse, messageId);
+                documentAggregationService.enqueueMessage(meta, messageContent, messageId, timestamp, messageType, hasUrl);
+                log.info("Message with URL enqueued for aggregation – skipping immediate processing.");
+                continue;
             }
+
+            // At this point there is NO batch active and the message is a standalone TEXT (or similar).
+
+            // Create effectively final copies for lambda usage
+            final String fpConversationId = conversationId;
+            final String fpDriverPhone = driverPhone;
+            final String fpDriverName = driverName;
+            final String fpMessageContent = messageContent;
+            final String fpMessageId = messageId;
+            final long fpTimestamp = timestamp;
+            final String fpMessageType = messageType;
+            final String fpPlatform = platform;
+            final String fpTenantId = tenantId;
+            final String fpAssistantId = assistantId;
+            final String fpLanguageCode = languageCode;
+
+            // Wrap TEXT processing in serialised task so it waits if Chat-Module is busy
+            Runnable textTask = () -> {
+                try {
+                    // Before executing, double-check conversation still open
+                    if (transactionDetailRepository.findMostRecentOpenConversation(fpDriverPhone).isEmpty()) {
+                        log.warn("Conversation closed before processing pending text from driver {}. Skipping message.", fpDriverPhone);
+                        return;
+                    }
+
+                    String aiResponse = chatModuleService.sendMessageToChatModuleWithConfig(
+                        fpConversationId,
+                        fpDriverPhone,
+                        fpDriverName,
+                        fpMessageContent,
+                        fpMessageId,
+                        fpTimestamp,
+                        fpMessageType,
+                        fpPlatform,
+                        fpTenantId,
+                        fpAssistantId,
+                        fpLanguageCode
+                    );
+
+                    log.info("Received AI response for driver {}: {}", fpDriverPhone, aiResponse);
+
+                    if (containsButtonOptions(aiResponse)) {
+                        ParsedResponse parsed = parseButtonResponse(aiResponse);
+                        whatsAppService.sendInteractiveButtonMessage(
+                            fpDriverPhone,
+                            parsed.getBodyText(),
+                            parsed.getButtonOptions(),
+                            fpMessageId
+                        );
+                    } else {
+                        whatsAppService.sendTextMessage(fpDriverPhone, aiResponse, fpMessageId);
+                    }
+                } catch (Exception e) {
+                    log.error("Error processing (serialised) text from driver {}: {}", fpDriverPhone, e.getMessage(), e);
+                    String fallback = "I'm having trouble processing your message right now. Please try again or contact support if the issue persists.";
+                    whatsAppService.sendTextMessage(fpDriverPhone, fallback, fpMessageId);
+                }
+            };
+
+            documentAggregationService.runSerialised(fpDriverPhone, textTask);
         }
     }
 
@@ -234,7 +276,7 @@ public class MessageProcessingService {
         }
         return "text"; // Default fallback type
     }
-
+    
     /**
      * Extract platform from integration type
      */

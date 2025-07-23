@@ -26,7 +26,7 @@ public interface ApiTemplateMappingRepository extends JpaRepository<ApiTemplateM
      * Find all templates for a specific API name and language
      */
     @Query("SELECT atm FROM ApiTemplateMapping atm WHERE atm.id.apiName = :apiName AND atm.id.lang = :lang AND atm.isActive = true")
-    List<ApiTemplateMapping> findByApiNameAndLang(@Param("apiName") String apiName, @Param("lang") String lang);
+    Optional<ApiTemplateMapping> findByApiNameAndLang(@Param("apiName") String apiName, @Param("lang") String lang);
     
     /**
      * Find all templates for a specific API name

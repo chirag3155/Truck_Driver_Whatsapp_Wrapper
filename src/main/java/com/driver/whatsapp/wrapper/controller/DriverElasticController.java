@@ -11,6 +11,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.web.bind.annotation.*;
 
 import java.io.IOException;
@@ -36,7 +37,8 @@ public class DriverElasticController {
         description = "Retrieves all conversations associated with a specific transaction ID from Elasticsearch"
     )
     public ResponseEntity<ApiGenericResponse<List<ConversationWithMetadataDTO>>> getConversationsByTransactionId(
-        @PathVariable String transactionId) {
+        @PathVariable String transactionId,
+        HttpServletRequest request) {
         
         log.info("Received request to get conversations for transactionId: {}", transactionId);
         
@@ -57,6 +59,7 @@ public class DriverElasticController {
         return ResponseEntity.ok(ApiGenericResponse.<List<ConversationWithMetadataDTO>>builder()
                 .status(200)
                 .message("Conversations retrieved successfully")
+                .path(request.getRequestURI())
                 .data(conversations)
                 .build());
 
@@ -66,6 +69,7 @@ public class DriverElasticController {
             return ResponseEntity.ok(ApiGenericResponse.<List<ConversationWithMetadataDTO>>builder()
                     .status(500)
                     .message("Failed to retrieve conversations: " + e.getMessage())
+                    .path(request.getRequestURI())
                     .data(null)
                     .build());
         } catch (Exception e) {
@@ -74,6 +78,7 @@ public class DriverElasticController {
         return ResponseEntity.ok(ApiGenericResponse.<List<ConversationWithMetadataDTO>>builder()
                 .status(500)
                     .message("Internal server error: " + e.getMessage())
+                    .path(request.getRequestURI())
                     .data(null)
                 .build());
     }
@@ -87,7 +92,8 @@ public class DriverElasticController {
   @PostMapping
     public ResponseEntity<ApiGenericResponse<JsonNode>> createConversation(
             @RequestHeader(name = "Authorization", required = false) String authToken,
-            @RequestBody JsonNode conversation) {
+            @RequestBody JsonNode conversation,
+            HttpServletRequest request) {
             
         log.info("Received request to create conversation");
         log.debug("Request payload size: {} characters", conversation.toString().length());
@@ -126,6 +132,7 @@ public class DriverElasticController {
             return ResponseEntity.ok(ApiGenericResponse.<JsonNode>builder()
                     .status(200)
                     .message("Conversation created successfully")
+                    .path(request.getRequestURI())
                     .data(createdConversation)
                     .build());
       } catch (Exception e) {
@@ -134,8 +141,59 @@ public class DriverElasticController {
                     .body(ApiGenericResponse.<JsonNode>builder()
                             .status(500)
                             .message("Failed to create conversation: " + e.getMessage())
+                            .path(request.getRequestURI())
                             .data(null)
                             .build());
       }
   }
+    @GetMapping("/conversation/conversationId/{conversationId}")
+    @Operation(
+        summary = "Get conversation by conversation ID",
+        description = "Retrieves a single conversation along with metadata using conversation ID"
+    )
+    public ResponseEntity<ApiGenericResponse<ConversationWithMetadataDTO>> getConversationByConversationId(
+            @PathVariable String conversationId,
+            HttpServletRequest request) {
+
+        log.info("Received request to get conversation for conversationId: {}", conversationId);
+        try {
+            ConversationWithMetadataDTO conversation = driverElasticService.getConversationWithMetadataByConversationId(conversationId);
+
+            if (conversation == null) {
+                log.warn("No conversation found for conversationId: {}", conversationId);
+                return ResponseEntity.ok(ApiGenericResponse.<ConversationWithMetadataDTO>builder()
+                        .status(404)
+                        .message("Conversation not found")
+                        .path(request.getRequestURI())
+                        .data(null)
+                        .build());
+            }
+            
+            log.info("Successfully retrieved conversation for conversationId: {}", conversationId);
+
+            return ResponseEntity.ok(ApiGenericResponse.<ConversationWithMetadataDTO>builder()
+                    .status(200)
+                    .message("Conversation retrieved successfully")
+                    .path(request.getRequestURI())
+                    .data(conversation)
+                    .build());
+
+        } catch (IOException e) {
+            log.error("IOException while retrieving conversation for conversationId: {}. Error: {}", conversationId, e.getMessage(), e);
+            return ResponseEntity.ok(ApiGenericResponse.<ConversationWithMetadataDTO>builder()
+                    .status(500)
+                    .message("Failed to retrieve conversation: " + e.getMessage())
+                    .path(request.getRequestURI())
+                    .data(null)
+                    .build());
+        } catch (Exception e) {
+            log.error("Unexpected error while retrieving conversation for conversationId: {}. Error: {}", conversationId, e.getMessage(), e);
+            return ResponseEntity.ok(ApiGenericResponse.<ConversationWithMetadataDTO>builder()
+                    .status(500)
+                    .message("Internal server error: " + e.getMessage())
+                    .path(request.getRequestURI())
+                    .data(null)
+                    .build());
+        }
+    }
 } 
